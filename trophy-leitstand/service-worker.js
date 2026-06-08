@@ -1,6 +1,6 @@
 /* UrPils Trophy Leitstand — Service Worker (Offline-Cache der App)
    Hinweis: OSM-Kartenkacheln werden hier NICHT gecacht (separate Offline-Lösung). */
-const CACHE = 'trophy-leitstand-v1';
+const CACHE = 'trophy-leitstand-v2';
 const CORE = [
   './',
   './index.html',

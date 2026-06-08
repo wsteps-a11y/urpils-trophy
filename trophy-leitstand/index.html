@@ -180,10 +180,13 @@
       <button class="btn geist mini" id="btnRouteUndo">↩️ Punkt zurück</button>
       <button class="btn geist mini" id="btnRouteClear">🗑️ Route</button>
       <button class="btn geist mini" id="btnZentrieren">🎯 Zentrieren</button>
+      <button class="btn geist mini" id="btnKarteOffline">⬇️ Karte offline laden</button>
     </div>
     <div class="hinweis" id="karteHinweis"></div>
     <div class="karte-box"><div id="map"></div></div>
-    <div class="hinweis">ℹ️ Die Offline-Kartenspeicherung wird noch sauber eingebaut. Aktuell braucht die Karte zum Laden Internet. Marker, Route &amp; Punkte funktionieren auch ohne Karten-Hintergrund.</div>
+    <div class="fortschritt" id="kachelBalken" style="display:none"><div></div></div>
+    <div class="hinweis" id="kachelStatus" style="display:none"></div>
+    <div class="hinweis">ℹ️ Die Karte (Bereich Wadrill) ist in der App gespeichert. Drücke einmal <b>„Karte offline laden"</b> (mit Internet) – danach funktioniert sie auch im Wald ohne Empfang.</div>
   </section>
 
   <!-- SPIELE -->
@@ -224,6 +227,13 @@
       <button class="btn" id="btnExport">💾 Sicherung herunterladen</button>
       <label class="btn geist" style="cursor:pointer">📂 Sicherung laden<input type="file" id="importDatei" accept="application/json" style="display:none"></label>
     </div>
+
+    <h2 style="margin-top:20px">🎈 Marker übernehmen (vom Kollegen)</h2>
+    <div class="hinweis">Wenn jemand die Ballons/Flaschen auf seinem Handy eingetragen hat: seine Sicherung hier laden. Es werden <b>nur die Karten-Marker</b> (🎈🍾🎯…) übernommen – deine Spieler, Regeln, Route &amp; Punkte bleiben unverändert.</div>
+    <div class="reihe">
+      <label class="btn" style="cursor:pointer">🎈 Nur Marker übernehmen<input type="file" id="importMarker" accept="application/json" style="display:none"></label>
+    </div>
+
     <details class="box" style="margin-top:16px">
       <summary><b>Alles zurücksetzen</b></summary>
       <div class="reihe" style="margin-top:10px">
@@ -369,24 +379,42 @@ const toastEl=document.getElementById('toast'); let toastTimer=null;
 function toast(txt){ toastEl.textContent=txt; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>toastEl.classList.remove('show'),2200); }
 
 /* ============================================================
-   IndexedDB-Kachelspeicher (Offline-Karte)
+   Offline-Karte: lokale Kacheln (in der App) + Online-Fallback
    ============================================================ */
-let _tileDB=null;
-function tileDB(){ if(_tileDB) return _tileDB; _tileDB=new Promise((res,rej)=>{ const r=indexedDB.open('trophyTiles',1); r.onupgradeneeded=()=>r.result.createObjectStore('tiles'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); return _tileDB; }
-async function tileGet(k){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles').objectStore('tiles').get(k); t.onsuccess=()=>res(t.result); t.onerror=()=>res(null); }); }
-async function tileSet(k,v){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles','readwrite').objectStore('tiles').put(v,k); t.oncomplete=()=>res(); t.onsuccess=()=>res(); t.onerror=()=>res(); }); }
-async function tileCount(){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles').objectStore('tiles').count(); t.onsuccess=()=>res(t.result); t.onerror=()=>res(0); }); }
-async function tileClear(){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles','readwrite').objectStore('tiles').clear(); t.oncomplete=()=>res(); t.onsuccess=()=>res(); }); }
-
-const CachedTiles = L.TileLayer.extend({
+const TILE_LOKAL='assets/tiles/{z}/{x}/{y}.png';
+const LocalTiles = L.TileLayer.extend({
   createTile:function(coords,done){
     const tile=document.createElement('img'); tile.alt=''; tile.setAttribute('role','presentation');
-    const key=coords.z+'/'+coords.x+'/'+coords.y; const netzUrl=this.getTileUrl(coords);
-    tileGet(key).then(dataUrl=>{ tile.onload=()=>done(null,tile); tile.onerror=()=>done(null,tile); tile.src=dataUrl||netzUrl; })
-      .catch(()=>{ tile.src=netzUrl; done(null,tile); });
+    const lokal=this.getTileUrl(coords);
+    let online=false;
+    tile.onload=()=>done(null,tile);
+    tile.onerror=()=>{
+      if(!online && navigator.onLine){
+        online=true;
+        const m=lokal.match(/tiles\/(\d+)\/(\d+)\/(\d+)\.png/);
+        if(m){ tile.src='https://'+['a','b','c'][(+m[2]+ +m[3])%3]+'.tile.openstreetmap.org/'+m[1]+'/'+m[2]+'/'+m[3]+'.png'; return; }
+      }
+      done(null,tile);
+    };
+    tile.src=lokal;
     return tile;
   }
 });
+// Alle gebündelten Kacheln einmal abrufen → Service-Worker cached sie (für echtes Offline)
+async function karteOfflineLaden(){
+  const balken=document.getElementById('kachelBalken'), status=document.getElementById('kachelStatus');
+  let liste;
+  try{ liste=await (await fetch('assets/tiles/tiles-list.json',{cache:'reload'})).json(); }
+  catch(e){ toast('Kachel-Liste nicht gefunden – nur online verfügbar'); return; }
+  balken.style.display='block'; status.style.display='block'; const bar=balken.firstElementChild; let ok=0;
+  for(let i=0;i<liste.length;i++){
+    try{ await fetch(liste[i],{cache:'reload'}); ok++; }catch(e){}
+    bar.style.width=Math.round((i+1)/liste.length*100)+'%';
+    status.textContent='Lade Karte… '+(i+1)+'/'+liste.length;
+  }
+  status.textContent='✓ Karte offline gespeichert ('+ok+' Kacheln). Funktioniert jetzt ohne Netz.';
+  setTimeout(()=>balken.style.display='none',1800); toast('Karte ist offline verfügbar');
+}
 /* ============================================================
    Karte
    ============================================================ */
@@ -401,7 +429,7 @@ const MARKER_TYP = {
 };
 function initKarte(){
   map=L.map('map',{tap:true}).setView(ZENTRUM,START_ZOOM);
-  new CachedTiles('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  new LocalTiles(TILE_LOKAL,{minZoom:12,maxZoom:19,minNativeZoom:13,maxNativeZoom:17,attribution:'© OpenStreetMap'}).addTo(map);
   routeLayer=L.layerGroup().addTo(map);
   markerLayer=L.layerGroup().addTo(map);
   map.on('click', e=>{
@@ -750,13 +778,24 @@ document.getElementById('btnTnAdd').addEventListener('click',()=>{ STATE.teilneh
 document.getElementById('btnExport').addEventListener('click',()=>{ const blob=new Blob([JSON.stringify(STATE,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='trophy-sicherung-'+new Date().toISOString().slice(0,10)+'.json'; a.click(); toast('Sicherung heruntergeladen'); });
 document.getElementById('importDatei').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const fr=new FileReader();
   fr.onload=()=>{ try{ const d=JSON.parse(fr.result); if(!d.teilnehmer) throw 0; STATE=migriere(d); speichern(); renderAlles(); toast('Sicherung geladen'); }catch(err){ alert('Datei konnte nicht gelesen werden.'); } }; fr.readAsText(f); });
+document.getElementById('importMarker').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const fr=new FileReader();
+  fr.onload=()=>{ try{
+    const d=JSON.parse(fr.result);
+    const fremd=Array.isArray(d.marker)?d.marker:[];
+    const bf=fremd.filter(m=>m.typ==='ballon'||m.typ==='flasche');
+    if(!bf.length){ alert('In dieser Datei sind keine Ballon-/Flaschen-Marker.'); e.target.value=''; return; }
+    const anzahl=bf.reduce((s,m)=>s+((m.items&&m.items.length)||0),0);
+    if(!confirm('Es werden '+bf.length+' Ballon-/Flaschen-Punkte ('+anzahl+' Stück) übernommen und ersetzen deine bisherigen 🎈/🍾-Marker.\nStationen, Route, Spieler & Punkte bleiben unverändert.\n\nFortfahren?')){ e.target.value=''; return; }
+    STATE.marker=STATE.marker.filter(m=>m.typ!=='ballon'&&m.typ!=='flasche').concat(bf);
+    speichern(); markerNeuZeichnen(); alleWertungen(); toast(bf.length+' Marker übernommen');
+  }catch(err){ alert('Datei konnte nicht gelesen werden.'); } e.target.value=''; }; fr.readAsText(f); });
 document.getElementById('btnReset').addEventListener('click',()=>{ if(confirm('Kompletten Spielstand löschen? (Offline-Kacheln bleiben)')){ STATE=standardDaten(); speichern(); renderAlles(); setModus({}); toast('Zurückgesetzt'); } });
-document.getElementById('btnKachelnLoeschen').addEventListener('click',async()=>{ if(confirm('Alle Offline-Kacheln löschen?')){ await tileClear(); toast('Offline-Kacheln gelöscht'); } });
+document.getElementById('btnKarteOffline').addEventListener('click',karteOfflineLaden);
+document.getElementById('btnKachelnLoeschen').addEventListener('click',async()=>{ if(confirm('Offline-Zwischenspeicher (App + Karte) leeren? Wird beim nächsten Laden mit Internet neu geholt.')){ try{ if('caches' in window){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){} toast('Offline-Cache geleert'); } });
 
 /* ---------- Start ---------- */
 function renderAlles(){ renderAblauf(); renderTeilnehmer(); renderSpiele(); alleWertungen(); renderRoute(); markerNeuZeichnen(); }
 initKarte(); renderAlles(); netzStatus();
-tileCount().then(n=>{ if(n>0) toast(n+' Kartenkacheln offline verfügbar'); });
 </script>
 <script>
 /* PWA: Service Worker registrieren (für Offline-Nutzung auf dem Handy) */
