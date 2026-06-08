@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>UrPils Trophy &middot; Leitstand</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1c4a2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trophy">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;600;700&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/vendor/leaflet.css">
+<script src="assets/vendor/leaflet.js"></script>
+<style>
+  :root{
+    --gruen:#1c4a2b; --gruen-tief:#123420;
+    --gold:#c9a14a; --gold-hell:#e8cf8a;
+    --papier:#f4ecd8; --papier-tief:#e7dcc0;
+    --tinte:#22281f; --rot:#9c3a2e; --schatten:rgba(18,52,32,.28);
+    --blau:#2c6e8f; --braun:#7a5230;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Spectral',Georgia,serif; color:var(--tinte);
+    background:
+      radial-gradient(circle at 20% 10%, rgba(201,161,74,.12), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(28,74,43,.10), transparent 45%),
+      var(--papier);
+    min-height:100%; line-height:1.5;
+  }
+  .rahmen{max-width:920px;margin:0 auto;padding:14px 14px 90px}
+  header.kopf{text-align:center;border-bottom:3px double var(--gruen);padding-bottom:12px;margin-bottom:14px}
+  .stern{font-size:18px;color:var(--gold);letter-spacing:4px}
+  h1{font-family:'Oswald',sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:2px;
+     color:var(--gruen);font-size:clamp(20px,5vw,32px);line-height:1.1}
+  .untertitel{font-style:italic;color:var(--gruen-tief);opacity:.8;font-size:14px}
+
+  nav.tabs{position:sticky;top:0;z-index:1200;display:flex;gap:4px;background:var(--papier);
+     padding:8px 0;margin-bottom:14px;border-bottom:1px solid var(--papier-tief);flex-wrap:wrap}
+  nav.tabs button{flex:1 1 auto;min-width:84px;font-family:'Oswald',sans-serif;text-transform:uppercase;
+     letter-spacing:1px;font-size:13px;font-weight:600;padding:10px 6px;cursor:pointer;
+     border:1.5px solid var(--gruen);background:transparent;color:var(--gruen);border-radius:6px}
+  nav.tabs button.aktiv{background:var(--gruen);color:var(--gold-hell)}
+
+  .panel{display:none}
+  .panel.aktiv{display:block}
+
+  h2{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:1.5px;color:var(--gruen);
+     font-size:18px;margin:4px 0 12px;border-left:4px solid var(--gold);padding-left:10px}
+  .hinweis{font-size:13px;font-style:italic;color:var(--gruen-tief);opacity:.85;margin-bottom:12px}
+
+  .karte-box{position:relative}
+  #map{height:60vh;min-height:340px;border:2px solid var(--gruen);border-radius:10px;box-shadow:0 4px 14px var(--schatten);z-index:1}
+  .karte-werkzeug{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+
+  button.btn,a.btn{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.6px;font-size:13px;
+     font-weight:600;padding:9px 14px;border-radius:7px;border:1.5px solid var(--gruen);background:var(--gruen);
+     color:var(--gold-hell);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+  button.btn.geist,a.btn.geist{background:transparent;color:var(--gruen)}
+  button.btn.aktiv{background:var(--gold);border-color:var(--gold);color:var(--gruen-tief)}
+  button.btn.warn{border-color:var(--rot);color:var(--rot);background:transparent}
+  button.mini{font-size:12px;padding:5px 9px}
+
+  table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.35);border-radius:8px;overflow:hidden}
+  th,td{padding:9px 8px;text-align:left;border-bottom:1px solid var(--papier-tief);font-size:14px}
+  th{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.5px;font-size:12px;
+     background:var(--gruen);color:var(--gold-hell)}
+  td.num,th.num{text-align:center;font-variant-numeric:tabular-nums}
+  tr.sieger td{background:rgba(201,161,74,.22);font-weight:600}
+  tr.letzter td{background:rgba(156,58,46,.10)}
+  .gesamt{font-weight:700;color:var(--gruen);font-size:16px}
+
+  ol.ablauf{list-style:none}
+  ol.ablauf li{display:flex;align-items:center;gap:12px;padding:12px;margin-bottom:8px;
+     background:rgba(255,255,255,.4);border-left:5px solid var(--papier-tief);border-radius:8px;cursor:pointer}
+  ol.ablauf li.laeuft{border-left-color:var(--gold);background:rgba(201,161,74,.14)}
+  ol.ablauf li.fertig{border-left-color:var(--gruen);opacity:.62}
+  ol.ablauf li.fertig .schritt-titel{text-decoration:line-through}
+  .schritt-emoji{font-size:26px;line-height:1}
+  .schritt-haupt{flex:1}
+  .schritt-titel{font-family:'Oswald',sans-serif;font-weight:600;font-size:16px;color:var(--gruen-tief)}
+  .schritt-info{font-size:13px;font-style:italic;opacity:.8}
+
+  .tn-zeile{display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,.4);
+     border-radius:8px;margin-bottom:6px}
+  .tn-zeile input[type=text]{flex:1;font-family:'Spectral',serif;font-size:15px;padding:7px 9px;
+     border:1px solid var(--papier-tief);border-radius:6px;background:#fff;color:var(--tinte)}
+  .tn-zeile label{font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap}
+
+  .pop h4{font-family:'Oswald',sans-serif;color:var(--gruen);text-transform:uppercase;font-size:14px;margin-bottom:6px}
+  .pop .item-zeile{display:flex;align-items:center;gap:6px;margin:4px 0}
+  .pop select,.pop input{font-family:'Spectral',serif;font-size:13px;padding:4px;border:1px solid #bbb;border-radius:5px}
+  .pop .pkt-zeile{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:3px 0}
+  .pop .regel{font-size:12px;font-style:italic;background:rgba(201,161,74,.16);padding:6px 8px;border-radius:6px;margin:4px 0;white-space:pre-wrap}
+
+  .pin{font-size:28px;line-height:1;position:relative;filter:drop-shadow(0 2px 3px rgba(0,0,0,.5));text-align:center}
+  .pin .badge{position:absolute;top:-6px;right:-12px;background:var(--rot);color:#fff;font-family:'Oswald',sans-serif;
+     font-size:11px;font-weight:700;border-radius:10px;padding:1px 5px;border:1.5px solid #fff;min-width:18px}
+  .pin .badge.leer{background:var(--gruen)}
+  .pin .badge.spielnr{background:var(--blau)}
+
+  .leiste{position:fixed;left:0;right:0;bottom:0;z-index:1300;background:var(--gruen-tief);color:var(--gold-hell);
+     display:flex;gap:10px;align-items:center;justify-content:center;padding:8px 12px;font-size:13px;flex-wrap:wrap}
+  .leiste .pkt{font-family:'Oswald',sans-serif;letter-spacing:.5px}
+  .online-an{color:#7fd18b} .online-aus{color:#e89a8a}
+
+  .toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2000;background:var(--gruen-tief);
+     color:var(--gold-hell);padding:10px 18px;border-radius:8px;font-family:'Oswald',sans-serif;letter-spacing:.5px;
+     box-shadow:0 4px 14px rgba(0,0,0,.4);opacity:0;transition:opacity .25s;pointer-events:none}
+  .toast.show{opacity:1}
+  .fortschritt{height:8px;background:var(--papier-tief);border-radius:4px;overflow:hidden;margin-top:6px}
+  .fortschritt > div{height:100%;background:var(--gold);width:0}
+  details.box{background:rgba(255,255,255,.4);border-radius:8px;padding:10px 12px;margin-bottom:10px}
+  details.box > summary{cursor:pointer;list-style:none}
+  details.box > summary::-webkit-details-marker{display:none}
+  .reihe{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+
+  .spiel-kopf{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .nr-kreis{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;
+     background:var(--gruen);color:var(--gold-hell);font-family:'Oswald',sans-serif;font-weight:700;font-size:14px;flex:none}
+  .spiel-name{font-family:'Oswald',sans-serif;font-weight:600;font-size:16px;color:var(--gruen-tief);flex:1;min-width:120px}
+  .pill{font-family:'Oswald',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+  .pill.zeit{background:var(--blau);color:#fff}
+  .pill.versuche{background:var(--braun);color:#fff}
+  .pill.bastel{background:#6a4c93;color:#fff}
+  .pill.karte{background:var(--gold);color:var(--gruen-tief)}
+  .pill.offen{background:var(--papier-tief);color:var(--gruen-tief)}
+  .pill.laeuft{background:var(--gold);color:var(--gruen-tief)}
+  .pill.fertig{background:var(--gruen);color:var(--gold-hell)}
+  textarea.regeln{width:100%;min-height:60px;font-family:'Spectral',serif;font-size:14px;padding:8px;
+     border:1px solid var(--papier-tief);border-radius:6px;background:#fff;color:var(--tinte);resize:vertical;margin:6px 0}
+  .spiel-body{margin-top:10px;padding-top:8px;border-top:1px dashed var(--papier-tief)}
+  .pkt-zeile{display:flex;align-items:center;gap:6px;margin:4px 0}
+  .pkt-zeile b{min-width:24px;text-align:center}
+  .pkt-zeile .sp-name{flex:1;min-width:50px}
+  .pkt-zeile input.erg{width:62px;font-family:'Spectral',serif;font-size:13px;padding:4px 5px;
+     border:1px solid var(--papier-tief);border-radius:5px;background:#fff;color:var(--tinte);text-align:center}
+  .pkt-zeile .roh{width:62px;text-align:center;font-size:13px;opacity:.85}
+  .pkt-zeile b.pp{min-width:34px;text-align:center;font-family:'Oswald',sans-serif;color:var(--gruen);
+     background:rgba(201,161,74,.22);border-radius:6px;padding:2px 0}
+  .feld-label{font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--gruen);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="rahmen">
+  <header class="kopf">
+    <div class="stern">★ ★ ★</div>
+    <h1>UrPils Trophy &middot; Leitstand</h1>
+    <div class="untertitel">Wadrill — der digitale Klemmbrett-Ersatz der Ausrichter</div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="ablauf" class="aktiv">Ablauf</button>
+    <button data-tab="karte">Karte</button>
+    <button data-tab="spiele">Spiele</button>
+    <button data-tab="wertung">Wertung</button>
+    <button data-tab="teilnehmer">Spieler</button>
+    <button data-tab="daten">Daten</button>
+  </nav>
+
+  <!-- TAGESABLAUF -->
+  <section class="panel aktiv" id="panel-ablauf">
+    <h2>Tagesablauf</h2>
+    <div class="hinweis">Der grobe Rahmen des Tages. Tippe einen Schritt an: <b>offen → läuft → fertig</b>. Die 11 Spiele mit Regeln & Punkten findest du im Tab <b>Spiele</b>.</div>
+    <ol class="ablauf" id="ablaufListe"></ol>
+  </section>
+
+  <!-- KARTE -->
+  <section class="panel" id="panel-karte">
+    <h2>Karte, Route &amp; Marker</h2>
+    <div class="karte-werkzeug">
+      <button class="btn" id="btnBearbeiten">✏️ Marker</button>
+      <button class="btn" id="btnRoute">🛣️ Route</button>
+      <button class="btn geist mini" id="btnRouteUndo">↩️ Punkt zurück</button>
+      <button class="btn geist mini" id="btnRouteClear">🗑️ Route</button>
+      <button class="btn geist mini" id="btnZentrieren">🎯 Zentrieren</button>
+    </div>
+    <div class="hinweis" id="karteHinweis"></div>
+    <div class="karte-box"><div id="map"></div></div>
+    <div class="hinweis">ℹ️ Die Offline-Kartenspeicherung wird noch sauber eingebaut. Aktuell braucht die Karte zum Laden Internet. Marker, Route &amp; Punkte funktionieren auch ohne Karten-Hintergrund.</div>
+  </section>
+
+  <!-- SPIELE -->
+  <section class="panel" id="panel-spiele">
+    <h2>Die 11 Spiele</h2>
+    <div class="hinweis">Aufklappen für Regeln, Modus, Status &amp; Punkte. Spiel&nbsp;11 zählt automatisch über die Karten-Marker. <a class="btn mini" href="../trophy-quiz/index.html" target="_blank" rel="noopener">▶ Quiz öffnen</a></div>
+    <div id="spieleListe"></div>
+    <div class="reihe">
+      <input type="text" id="neuesSpielName" placeholder="weiteres Spiel…" style="flex:1;min-width:160px;padding:8px;border:1px solid var(--papier-tief);border-radius:6px">
+      <button class="btn" id="btnSpielAdd">+ Spiel</button>
+    </div>
+  </section>
+
+  <!-- WERTUNG -->
+  <section class="panel" id="panel-wertung">
+    <h2>Tageswertung</h2>
+    <div class="hinweis">Platzpunkte pro Spiel: <b>1. Platz = Anzahl Mitspieler</b>, dann je −1 (Gleichstand teilt sich die Punkte). Summe aller 11 Spiele <b>minus dem Streichresultat</b>. 🍾 = gesammelte Flaschen. Sieger 🏆 oben, Rote Laterne 🔴 unten.</div>
+    <table id="wertungTabelle"></table>
+    <h2 style="margin-top:22px">✂️ Streichresultat</h2>
+    <div class="hinweis">Jeder streicht <b>genau ein</b> Spiel (Pflicht). Nicht streichbar: Quiz, 6er Träger, Flaschen. Standard ist automatisch das schlechteste Spiel – pro Spieler änderbar.</div>
+    <div id="streichListe"></div>
+    <div class="hinweis" id="wertungDetailHinweis" style="margin-top:12px">Ergebnisse trägst du im Tab <b>Spiele</b> ein (oder am Stations-Marker auf der Karte) – die Platzpunkte rechnet die App automatisch.</div>
+  </section>
+
+  <!-- TEILNEHMER -->
+  <section class="panel" id="panel-teilnehmer">
+    <h2>Teilnehmer</h2>
+    <div class="hinweis">Ausrichter (Vorjahres-Gewinner &amp; -Verlierer) spielen nicht mit. Gewinner richtet das Frühstück aus, Verlierer abends das Grillen.</div>
+    <div id="tnListe"></div>
+    <div class="reihe"><button class="btn" id="btnTnAdd">+ Teilnehmer</button></div>
+  </section>
+
+  <!-- DATEN -->
+  <section class="panel" id="panel-daten">
+    <h2>Daten sichern</h2>
+    <div class="hinweis">Alles wird automatisch im Gerät gespeichert. Mach vor dem Trophy-Tag trotzdem eine Sicherung als Datei.</div>
+    <div class="reihe">
+      <button class="btn" id="btnExport">💾 Sicherung herunterladen</button>
+      <label class="btn geist" style="cursor:pointer">📂 Sicherung laden<input type="file" id="importDatei" accept="application/json" style="display:none"></label>
+    </div>
+    <details class="box" style="margin-top:16px">
+      <summary><b>Alles zurücksetzen</b></summary>
+      <div class="reihe" style="margin-top:10px">
+        <button class="btn warn" id="btnReset">⚠️ Spielstand löschen</button>
+        <button class="btn warn geist" id="btnKachelnLoeschen">🗑️ Offline-Kacheln löschen</button>
+      </div>
+    </details>
+    <details class="box">
+      <summary><b>Kurzanleitung</b></summary>
+      <ol style="margin:10px 0 0 18px;font-size:14px;line-height:1.7">
+        <li><b>Offline-Karte:</b> wird noch sauber eingebaut. Aktuell braucht die Karte beim Laden Internet — alles andere (Marker, Route, Punkte) geht auch ohne.</li>
+        <li><b>Route zeichnen:</b> „Route" an → nacheinander auf die Karte tippen. Punkt antippen löscht ihn, „Punkt zurück" macht den letzten rückgängig.</li>
+        <li><b>Marker setzen:</b> „Marker" an → auf die Karte tippen → Typ wählen (🎈/🍾 für Spiel 11, 🎯 Station = Spielort, 🥐/☕/🔥).</li>
+        <li><b>Station mit Spiel verknüpfen:</b> 🎯-Marker antippen → Spiel auswählen → dort Regeln sehen und Punkte eintragen.</li>
+        <li><b>Spiel 11:</b> 🎈/🍾-Marker antippen → je Treffer/Fund den Spieler wählen (1 Punkt).</li>
+      </ol>
+    </details>
+  </section>
+</div>
+
+<div class="leiste">
+  <span id="netzStatus" class="online-aus">● offline</span>
+  <span class="pkt" id="leisteFuehrender">—</span>
+  <span class="pkt">| 🍾 offen: <b id="leisteOffen">0</b></span>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   UrPils Trophy · Leitstand — offline, eine Datei, ein Gerät
+   ============================================================ */
+const ZENTRUM = [49.5833, 6.8911];   // Wadrill
+const START_ZOOM = 15;
+const SPEICHER_KEY = 'trophyLeitstand_v1';
+const DATEN_VERSION = 4;
+const SCHEMA = 'linear';   // Platzpunkte: 1. = Anzahl Mitspieler, dann je -1
+
+function uid(){ return Math.random().toString(36).slice(2,10); }
+
+/* ---------- Standard-Inhalte ---------- */
+const SPIEL_NAMEN = [
+  'Etiketten und Marken',   // 1 (Quiz)
+  'Gut Schlauch',           // 2
+  'Stand Up Paddeln',       // 3
+  'Kugelstoßen',            // 4
+  'Ballon-Pumpe',           // 5
+  'Ball auf Brett',         // 6
+  'Klassiker',              // 7
+  'Der Rohr-Jongleur',      // 8
+  'Torwandschießen',        // 9
+  '6er Träger',             // 10
+  'Flaschen finden & schießen' // 11 (Karte)
+];
+function standardSpiele(){
+  return SPIEL_NAMEN.map((name,i)=>{
+    const modus=(i+1===10)?'bastel':'';
+    return {
+      id:uid(), nr:i+1, name,
+      regeln:'', modus, status:'offen',
+      typ: (i+1===11)?'flaschen':'manuell',
+      richtung: (modus==='zeit')?'tief':'hoch',   // hoch = höher ist besser
+      ergebnis:{}, punkte:{}
+    };
+  });
+}
+function standardAblauf(){
+  return [
+    {id:uid(), emoji:'🥐', titel:'Frühstück', info:'Beim Vorjahres-Gewinner', status:'offen'},
+    {id:uid(), emoji:'🏁', titel:'Start der Route', info:'Gemeinsam Richtung Grillplatz', status:'offen'},
+    {id:uid(), emoji:'🎯', titel:'Spiele & Stationen unterwegs', info:'Siehe Tab „Spiele" — Spiel 11 läuft die ganze Route über', status:'offen'},
+    {id:uid(), emoji:'☕', titel:'Pause', info:'Stärkung', status:'offen'},
+    {id:uid(), emoji:'🔥', titel:'Ziel & Grillen', info:'Beim Vorjahres-Verlierer', status:'offen'}
+  ];
+}
+function standardDaten(){
+  return {
+    v: DATEN_VERSION,
+    jahr: new Date().getFullYear(),
+    teilnehmer: Array.from({length:8}, (_,i)=>({id:uid(), name:'Spieler '+(i+1), ausrichter:false, streich:'auto'})),
+    marker: [],
+    route: [],
+    spiele: standardSpiele(),
+    ablauf: standardAblauf()
+  };
+}
+
+/* ---------- State laden + Migration (Teilnehmer/Marker bleiben!) ---------- */
+function migriere(s){
+  if(!s.route) s.route=[];
+  if(!Array.isArray(s.marker)) s.marker=[];
+  // v1 → v2: Spiele auf 11er-Struktur bringen (vorhandene Punkte/Regeln nach Name übernehmen)
+  if(!s.v || s.v<2){
+    const alt = Array.isArray(s.spiele)? s.spiele : [];
+    const neu = standardSpiele();
+    neu.forEach(g=>{
+      const treffer = alt.find(x=>{
+        if(!x||!x.name) return false;
+        if(x.name===g.name) return true;
+        if(g.nr===1 && /etikett/i.test(x.name)) return true;
+        if(g.nr===11 && /flasch/i.test(x.name)) return true;
+        return false;
+      });
+      if(treffer){
+        if(treffer.punkte) g.punkte=treffer.punkte;
+        if(treffer.regeln) g.regeln=treffer.regeln;
+        if(treffer.modus) g.modus=treffer.modus;
+        if(treffer.status) g.status=treffer.status;
+      }
+    });
+    s.spiele=neu;
+    s.ablauf=standardAblauf();
+    s.v=2;
+  }
+  // v2 → v3: 6er Träger ist eine Bastelaufgabe (Bewertung am Ziel)
+  if(s.v<3){
+    const g10=(s.spiele||[]).find(x=>x.nr===10);
+    if(g10 && !g10.modus) g10.modus='bastel';
+    s.v=3;
+  }
+  // v3 → v4: automatische Platzpunkte + Streichresultat
+  if(s.v<4){
+    (s.spiele||[]).forEach(g=>{
+      if(!g.ergebnis) g.ergebnis={};
+      if(!g.richtung) g.richtung = (g.modus==='zeit')?'tief':'hoch';
+    });
+    (s.teilnehmer||[]).forEach(t=>{ if(!t.streich) t.streich='auto'; });
+    s.v=4;
+  }
+  return s;
+}
+function laden(){
+  try{ const s=JSON.parse(localStorage.getItem(SPEICHER_KEY)); if(s&&s.teilnehmer) return migriere(s); }catch(e){}
+  return standardDaten();
+}
+let STATE = laden();
+let speicherTimer=null;
+function speichern(){ clearTimeout(speicherTimer); speicherTimer=setTimeout(()=>localStorage.setItem(SPEICHER_KEY, JSON.stringify(STATE)),120); }
+function aktiveSpieler(){ return STATE.teilnehmer.filter(t=>!t.ausrichter); }
+function spielById(id){ return STATE.spiele.find(s=>s.id===id); }
+
+/* ---------- Toast ---------- */
+const toastEl=document.getElementById('toast'); let toastTimer=null;
+function toast(txt){ toastEl.textContent=txt; toastEl.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>toastEl.classList.remove('show'),2200); }
+
+/* ============================================================
+   IndexedDB-Kachelspeicher (Offline-Karte)
+   ============================================================ */
+let _tileDB=null;
+function tileDB(){ if(_tileDB) return _tileDB; _tileDB=new Promise((res,rej)=>{ const r=indexedDB.open('trophyTiles',1); r.onupgradeneeded=()=>r.result.createObjectStore('tiles'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); return _tileDB; }
+async function tileGet(k){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles').objectStore('tiles').get(k); t.onsuccess=()=>res(t.result); t.onerror=()=>res(null); }); }
+async function tileSet(k,v){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles','readwrite').objectStore('tiles').put(v,k); t.oncomplete=()=>res(); t.onsuccess=()=>res(); t.onerror=()=>res(); }); }
+async function tileCount(){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles').objectStore('tiles').count(); t.onsuccess=()=>res(t.result); t.onerror=()=>res(0); }); }
+async function tileClear(){ const db=await tileDB(); return new Promise(res=>{ const t=db.transaction('tiles','readwrite').objectStore('tiles').clear(); t.oncomplete=()=>res(); t.onsuccess=()=>res(); }); }
+
+const CachedTiles = L.TileLayer.extend({
+  createTile:function(coords,done){
+    const tile=document.createElement('img'); tile.alt=''; tile.setAttribute('role','presentation');
+    const key=coords.z+'/'+coords.x+'/'+coords.y; const netzUrl=this.getTileUrl(coords);
+    tileGet(key).then(dataUrl=>{ tile.onload=()=>done(null,tile); tile.onerror=()=>done(null,tile); tile.src=dataUrl||netzUrl; })
+      .catch(()=>{ tile.src=netzUrl; done(null,tile); });
+    return tile;
+  }
+});
+/* ============================================================
+   Karte
+   ============================================================ */
+let map, routeLayer, markerLayer, bearbeiten=false, routeModus=false;
+const MARKER_TYP = {
+  ballon:{emoji:'🎈', label:'Ballons', items:true},
+  flasche:{emoji:'🍾', label:'Flaschen', items:true},
+  station:{emoji:'🎯', label:'Station', items:false},
+  start:{emoji:'🥐', label:'Start', items:false},
+  pause:{emoji:'☕', label:'Pause', items:false},
+  ziel:{emoji:'🔥', label:'Ziel', items:false}
+};
+function initKarte(){
+  map=L.map('map',{tap:true}).setView(ZENTRUM,START_ZOOM);
+  new CachedTiles('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  routeLayer=L.layerGroup().addTo(map);
+  markerLayer=L.layerGroup().addTo(map);
+  map.on('click', e=>{
+    if(routeModus){ STATE.route.push([e.latlng.lat,e.latlng.lng]); speichern(); renderRoute(); }
+    else if(bearbeiten){ markerHinzufuegenDialog(e.latlng); }
+  });
+  renderRoute(); markerNeuZeichnen(); aktualisiereKarteHinweis();
+}
+function renderRoute(){
+  if(!routeLayer) return; routeLayer.clearLayers();
+  if(STATE.route && STATE.route.length>1)
+    L.polyline(STATE.route,{color:'#9c3a2e',weight:4,opacity:.85,dashArray:'9,7'}).addTo(routeLayer);
+  if(routeModus && STATE.route) STATE.route.forEach((pt,i)=>{
+    const c=L.circleMarker(pt,{radius:7,color:'#123420',fillColor:'#c9a14a',fillOpacity:1,weight:2});
+    c.on('click', ev=>{ L.DomEvent.stop(ev); if(confirm('Diesen Routenpunkt ('+(i+1)+') löschen?')){ STATE.route.splice(i,1); speichern(); renderRoute(); } });
+    routeLayer.addLayer(c);
+  });
+}
+function iconFor(m){
+  const typ=MARKER_TYP[m.typ]; let badge='';
+  if(typ.items){ const offen=(m.items||[]).filter(i=>!i.spielerId).length; badge=`<span class="badge ${offen===0?'leer':''}">${offen}</span>`; }
+  else if(m.typ==='station' && m.spielId){ const g=spielById(m.spielId); if(g) badge=`<span class="badge spielnr">${g.nr}</span>`; }
+  return L.divIcon({className:'', iconSize:[34,40], iconAnchor:[17,38], html:`<div class="pin pin-${m.typ}">${typ.emoji}${badge}</div>`});
+}
+function markerNeuZeichnen(){
+  if(!markerLayer) return; markerLayer.clearLayers();
+  STATE.marker.forEach(m=>{
+    const mk=L.marker([m.lat,m.lng],{icon:iconFor(m),draggable:bearbeiten});
+    mk.on('dragend',e=>{ const p=e.target.getLatLng(); m.lat=p.lat; m.lng=p.lng; speichern(); });
+    mk.bindPopup(()=>popupInhalt(m),{minWidth:240,maxWidth:300});
+    markerLayer.addLayer(mk);
+  });
+}
+function spielerOptions(sel){ let o='<option value="">— offen —</option>'; aktiveSpieler().forEach(t=>o+=`<option value="${t.id}" ${sel===t.id?'selected':''}>${escAttr(t.name)}</option>`); return o; }
+
+function popupInhalt(m){
+  const typ=MARKER_TYP[m.typ]; const div=document.createElement('div'); div.className='pop';
+  const titel=m.name||typ.label;
+  if(typ.items){
+    const offen=m.items.filter(i=>!i.spielerId).length;
+    div.innerHTML=`<h4>${typ.emoji} ${escHtml(titel)}</h4><div style="font-size:12px;margin-bottom:6px">${m.items.length} Stück · offen: <b>${offen}</b></div>`;
+    m.items.forEach((it,idx)=>{
+      const z=document.createElement('div'); z.className='item-zeile';
+      z.innerHTML=`<span style="width:20px">${idx+1}.</span><select style="flex:1">${spielerOptions(it.spielerId)}</select>`;
+      z.querySelector('select').addEventListener('change',ev=>{ it.spielerId=ev.target.value||null; speichern(); markerNeuZeichnen(); alleWertungen(); });
+      div.appendChild(z);
+    });
+  } else if(m.typ==='station'){
+    div.innerHTML=`<h4>🎯 ${escHtml(m.name||'Station')}</h4>`;
+    const sel=document.createElement('select'); sel.style.width='100%';
+    let o='<option value="">— Spiel an dieser Station wählen —</option>';
+    STATE.spiele.filter(s=>s.typ==='manuell').forEach(s=>o+=`<option value="${s.id}" ${m.spielId===s.id?'selected':''}>Spiel ${s.nr}: ${escAttr(s.name)}</option>`);
+    sel.innerHTML=o;
+    sel.addEventListener('change',ev=>{ m.spielId=ev.target.value||null; speichern(); markerNeuZeichnen(); div.replaceWith(popupInhalt(m)); });
+    div.appendChild(sel);
+    const g=m.spielId?spielById(m.spielId):null;
+    if(g){
+      if(g.regeln){ const r=document.createElement('div'); r.className='regel'; r.textContent=g.regeln; div.appendChild(r); }
+      const rh=document.createElement('div'); rh.style.cssText='font-size:11px;opacity:.75;margin:2px 0';
+      rh.textContent='Ergebnis eintragen → Platzpunkte rechnen automatisch ('+(spielRichtung(g)==='tief'?'niedriger = besser':'höher = besser')+')';
+      div.appendChild(rh);
+      div.appendChild(ergebnisBlock(g));
+    }
+  } else {
+    div.innerHTML=`<h4>${typ.emoji} ${escHtml(titel)}</h4>`;
+  }
+  if(bearbeiten){
+    const akt=document.createElement('div'); akt.className='reihe'; akt.style.marginTop='8px';
+    akt.innerHTML=`<button class="btn mini geist">✏️ Umbenennen</button><button class="btn mini warn">🗑️ Löschen</button>`;
+    akt.querySelectorAll('button')[0].addEventListener('click',()=>{ const n=prompt('Name des Markers:',m.name||''); if(n!==null){ m.name=n.trim(); speichern(); markerNeuZeichnen(); map.closePopup(); } });
+    akt.querySelectorAll('button')[1].addEventListener('click',()=>{ if(confirm('Marker löschen?')){ STATE.marker=STATE.marker.filter(x=>x!==m); speichern(); markerNeuZeichnen(); map.closePopup(); } });
+    div.appendChild(akt);
+  }
+  return div;
+}
+// Block aus Ergebnis-Eingabe + automatischen Platzpunkten (geteilt: Spiele-Tab & Karten-Popup)
+function ergebnisBlock(g){
+  const wrap=document.createElement('div'); g.ergebnis=g.ergebnis||{};
+  const ppEls={};
+  const ph = g.modus==='zeit'?'Zeit':(g.modus==='versuche'?'Treffer':(g.modus==='bastel'?'Wertung':'Punkte'));
+  function refresh(){ const m=platzPunkte(g); aktiveSpieler().forEach(t=>{ if(ppEls[t.id]) ppEls[t.id].textContent=fmtPts(m[t.id]||0); }); }
+  const m0=platzPunkte(g);
+  aktiveSpieler().forEach(t=>{
+    const z=document.createElement('div'); z.className='pkt-zeile';
+    const name=document.createElement('span'); name.className='sp-name'; name.textContent=t.name; z.appendChild(name);
+    if(g.typ==='flaschen'){
+      const roh=document.createElement('span'); roh.className='roh'; roh.textContent=(flaschenProSpieler()[t.id]||0)+' 🍾'; z.appendChild(roh);
+    } else {
+      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='decimal';
+      inp.placeholder=ph; inp.value=g.ergebnis[t.id]||'';
+      inp.addEventListener('input',()=>{ g.ergebnis[t.id]=inp.value; speichern(); refresh(); alleWertungen(); });
+      z.appendChild(inp);
+    }
+    const pp=document.createElement('b'); pp.className='pp'; pp.textContent=fmtPts(m0[t.id]||0); pp.title='Platzpunkte'; ppEls[t.id]=pp;
+    z.appendChild(pp); wrap.appendChild(z);
+  });
+  return wrap;
+}
+function markerHinzufuegenDialog(latlng){
+  const html=document.createElement('div'); html.className='pop';
+  html.innerHTML=`<h4>Neuer Marker</h4><div class="reihe" id="typWahl"></div>`;
+  Object.entries(MARKER_TYP).forEach(([key,t])=>{ const b=document.createElement('button'); b.className='btn mini geist'; b.innerHTML=t.emoji+' '+t.label;
+    b.addEventListener('click',()=>{ markerErstellen(key,latlng); map.closePopup(); }); html.querySelector('#typWahl').appendChild(b); });
+  L.popup({minWidth:250}).setLatLng(latlng).setContent(html).openOn(map);
+}
+function markerErstellen(typ,latlng){
+  const m={id:uid(),typ,lat:latlng.lat,lng:latlng.lng,name:''};
+  if(MARKER_TYP[typ].items){ const n=parseInt(prompt('Wie viele '+(typ==='ballon'?'Ballons 🎈':'Flaschen 🍾')+' an diesem Punkt?','1'),10); if(!n||n<1) return; m.items=Array.from({length:n},()=>({id:uid(),spielerId:null})); }
+  if(typ==='station'){ m.spielId=null; m.name=prompt('Name der Station (optional):','')||''; }
+  STATE.marker.push(m); speichern(); markerNeuZeichnen(); alleWertungen(); toast(MARKER_TYP[typ].emoji+' Marker gesetzt');
+}
+
+/* ============================================================
+   Wertung
+   ============================================================ */
+function flaschenProSpieler(){ const r={}; aktiveSpieler().forEach(t=>r[t.id]=0);
+  STATE.marker.forEach(m=>{ if((m.typ==='ballon'||m.typ==='flasche')&&m.items) m.items.forEach(it=>{ if(it.spielerId&&r[it.spielerId]!=null) r[it.spielerId]++; }); }); return r; }
+
+function spielRichtung(g){ return g.richtung || (g.modus==='zeit'?'tief':'hoch'); }
+function parseZahl(s){ if(s==null||s==='') return null; const n=parseFloat(String(s).replace(',','.').replace(/[^0-9.\-]/g,'')); return isNaN(n)?null:n; }
+function fmtPts(p){ p=Math.round(p*10)/10; return Number.isInteger(p)?String(p):String(p).replace('.',','); }
+
+// Rohwerte je Spieler für ein Spiel (Ergebnis-Eingabe bzw. Flaschenzahl)
+function rohwerte(g){
+  const r={};
+  if(g.typ==='flaschen'){ const fl=flaschenProSpieler(); aktiveSpieler().forEach(t=>r[t.id]=fl[t.id]||0); return r; }
+  g.ergebnis=g.ergebnis||{};
+  aktiveSpieler().forEach(t=>{ r[t.id]=parseZahl(g.ergebnis[t.id]); });
+  return r;
+}
+// Lineare Platzpunkte je Spiel: bester = Anzahl Mitspieler, dann -1; Gleichstand teilt sich die Punkte
+function platzPunkte(g){
+  const aktive=aktiveSpieler(); const N=aktive.length;
+  const roh=rohwerte(g); const richtung=spielRichtung(g);
+  const pts={}; aktive.forEach(t=>pts[t.id]=0);
+  const mit=aktive.filter(t=>roh[t.id]!=null);
+  if(!mit.length) return pts;
+  const werte=mit.map(t=>roh[t.id]);
+  if(Math.min(...werte)===Math.max(...werte)) return pts;  // alle gleich (z.B. ungespielt) → 0 Punkte
+  const sortiert=mit.slice().sort((a,b)=> richtung==='tief' ? roh[a.id]-roh[b.id] : roh[b.id]-roh[a.id]);
+  let i=0;
+  while(i<sortiert.length){
+    let j=i; while(j+1<sortiert.length && roh[sortiert[j+1].id]===roh[sortiert[i].id]) j++;
+    let summe=0; for(let k=i;k<=j;k++) summe += (N-k);   // Punkte für Rang k+1 = N-k
+    const avg=summe/(j-i+1);
+    for(let k=i;k<=j;k++) pts[sortiert[k].id]=avg;
+    i=j+1;
+  }
+  return pts;
+}
+// Streichbare Spiele: alle Mess-Spiele außer Quiz(1), 6er Träger(10) und Flaschen(11)
+function streichbareSpiele(){ return STATE.spiele.filter(g=> g.typ==='manuell' && g.nr!==1 && g.nr!==10); }
+
+function gesamtProSpieler(){
+  const fl=flaschenProSpieler();
+  const perGame={}; STATE.spiele.forEach(g=> perGame[g.id]=platzPunkte(g));
+  const elig=streichbareSpiele();
+  const res={};
+  aktiveSpieler().forEach(t=>{
+    const perSpiel={}; let total=0;
+    STATE.spiele.forEach(g=>{ const p=perGame[g.id][t.id]||0; perSpiel[g.id]=p; total+=p; });
+    let streichId=t.streich||'auto', streichPts=0;
+    if(elig.length){
+      if(streichId!=='auto' && elig.find(g=>g.id===streichId)){ streichPts=perSpiel[streichId]||0; }
+      else { let w=null; elig.forEach(g=>{ const p=perSpiel[g.id]||0; if(w===null||p<w.p) w={id:g.id,p}; }); if(w){ streichId=w.id; streichPts=w.p; } }
+      total-=streichPts;
+    } else streichId=null;
+    res[t.id]={ flaschen:fl[t.id]||0, gesamt:total, streichId, streichPts, perSpiel };
+  });
+  return res;
+}
+function alleWertungen(){ renderWertung(); renderStreich(); renderLeiste(); }
+function renderWertung(){
+  const w=gesamtProSpieler();
+  const reihen=aktiveSpieler().map(t=>({id:t.id, name:t.name, ...w[t.id]})).sort((a,b)=>b.gesamt-a.gesamt);
+  const maxG=reihen.length?reihen[0].gesamt:0;
+  let html=`<thead><tr><th>#</th><th>Name</th><th class="num">🍾</th><th class="num">Streich</th><th class="num">Σ Gesamt</th></tr></thead><tbody>`;
+  reihen.forEach((r,i)=>{ const sieger=i===0&&maxG>0, letzter=i===reihen.length-1&&reihen.length>1&&maxG>0;
+    const platz=sieger?'🏆':(letzter?'🔴':(i+1));
+    const sg=r.streichId?spielById(r.streichId):null;
+    const streichTxt = sg? `S${sg.nr} −${fmtPts(r.streichPts)}` : '—';
+    html+=`<tr class="${sieger?'sieger':''}${letzter?' letzter':''}"><td class="num">${platz}</td><td>${escHtml(r.name)}</td><td class="num">${r.flaschen}</td><td class="num" style="font-size:12px;opacity:.8">${streichTxt}</td><td class="num gesamt">${fmtPts(r.gesamt)}</td></tr>`; });
+  html+='</tbody>'; document.getElementById('wertungTabelle').innerHTML=html;
+}
+function renderStreich(){
+  const box=document.getElementById('streichListe'); if(!box) return;
+  const w=gesamtProSpieler(); const elig=streichbareSpiele(); box.innerHTML='';
+  aktiveSpieler().forEach(t=>{
+    const z=document.createElement('div'); z.className='tn-zeile';
+    const r=w[t.id]; const sg=r.streichId?spielById(r.streichId):null;
+    const sel=document.createElement('select'); sel.style.cssText='flex:1;padding:6px;border:1px solid var(--papier-tief);border-radius:6px;background:#fff';
+    const autoPts = (()=>{ let mn=null; elig.forEach(g=>{ const p=r.perSpiel[g.id]||0; if(mn===null||p<mn) mn=p; }); return mn; })();
+    let o=`<option value="auto" ${(!t.streich||t.streich==='auto')?'selected':''}>Auto: schlechtestes${autoPts!=null?' (−'+fmtPts(autoPts)+')':''}</option>`;
+    elig.forEach(g=>{ o+=`<option value="${g.id}" ${t.streich===g.id?'selected':''}>Spiel ${g.nr}: ${escAttr(g.name)} (−${fmtPts(r.perSpiel[g.id]||0)})</option>`; });
+    sel.innerHTML=o;
+    sel.addEventListener('change',()=>{ t.streich=sel.value; speichern(); alleWertungen(); });
+    z.innerHTML=`<span style="flex:1;min-width:80px">${escHtml(t.name)}</span>`;
+    const info=document.createElement('span'); info.style.cssText='font-size:12px;opacity:.8;white-space:nowrap';
+    info.textContent = sg?`streicht S${sg.nr}`:'—';
+    z.appendChild(sel); z.appendChild(info);
+    box.appendChild(z);
+  });
+}
+
+/* ============================================================
+   Spiele-Tab
+   ============================================================ */
+const MODUS_LABEL={'':'— Modus —','zeit':'⏱️ auf Zeit','versuche':'🔁 auf Versuche','bastel':'🛠️ Bastelaufgabe'};
+function renderSpiele(){
+  const box=document.getElementById('spieleListe'); box.innerHTML='';
+  STATE.spiele.slice().sort((a,b)=>a.nr-b.nr).forEach(g=>box.appendChild(spielKarte(g)));
+}
+function spielKarte(g){
+  const d=document.createElement('details'); d.className='box';
+  const sum=document.createElement('summary'); sum.className='spiel-kopf';
+  const modusPill = g.typ==='flaschen' ? `<span class="pill karte">🗺️ Karte</span>` : (g.modus?`<span class="pill ${g.modus}">${MODUS_LABEL[g.modus]}</span>`:'');
+  sum.innerHTML=`<span class="nr-kreis">${g.nr}</span><span class="spiel-name">${escHtml(g.name)}</span>${modusPill}<span class="pill ${g.status}">${({offen:'offen',laeuft:'läuft',fertig:'fertig'})[g.status]}</span>`;
+  d.appendChild(sum);
+  const body=document.createElement('div'); body.className='spiel-body';
+
+  // Name editierbar
+  const nameWrap=document.createElement('div');
+  nameWrap.innerHTML=`<div class="feld-label">Name</div><input type="text" value="${escAttr(g.name)}" style="width:100%;padding:7px;border:1px solid var(--papier-tief);border-radius:6px">`;
+  nameWrap.querySelector('input').addEventListener('input',e=>{ g.name=e.target.value; speichern(); sum.querySelector('.spiel-name').textContent=g.name; });
+  body.appendChild(nameWrap);
+
+  // Regeln
+  const regWrap=document.createElement('div');
+  regWrap.innerHTML=`<div class="feld-label">Regeln / Kommentar</div>`;
+  const ta=document.createElement('textarea'); ta.className='regeln'; ta.value=g.regeln||''; ta.placeholder='Spielregeln hier eintragen…';
+  ta.addEventListener('input',()=>{ g.regeln=ta.value; speichern(); });
+  regWrap.appendChild(ta); body.appendChild(regWrap);
+
+  // Modus + Richtung + Status
+  const steuer=document.createElement('div'); steuer.className='reihe';
+  if(g.typ!=='flaschen'){
+    const ms=document.createElement('select'); ms.style.cssText='padding:7px;border-radius:6px;border:1px solid var(--papier-tief)';
+    Object.entries(MODUS_LABEL).forEach(([v,l])=>{ const o=document.createElement('option'); o.value=v; o.textContent=l; if(g.modus===v)o.selected=true; ms.appendChild(o); });
+    ms.addEventListener('change',()=>{ g.modus=ms.value; g.richtung=(g.modus==='zeit')?'tief':'hoch'; speichern(); renderSpiele(); alleWertungen(); });
+    steuer.appendChild(ms);
+    const rs=document.createElement('select'); rs.style.cssText='padding:7px;border-radius:6px;border:1px solid var(--papier-tief)';
+    rs.innerHTML=`<option value="hoch" ${spielRichtung(g)==='hoch'?'selected':''}>höher = besser</option><option value="tief" ${spielRichtung(g)==='tief'?'selected':''}>niedriger = besser</option>`;
+    rs.addEventListener('change',()=>{ g.richtung=rs.value; speichern(); renderSpiele(); alleWertungen(); });
+    steuer.appendChild(rs);
+  } else {
+    const note=document.createElement('span'); note.style.cssText='font-size:12px;opacity:.8'; note.textContent='mehr Flaschen = besser (zählt über die Karte)'; steuer.appendChild(note);
+  }
+  const stBtn=document.createElement('button'); stBtn.className='btn mini'; stBtn.textContent='Status: '+({offen:'offen',laeuft:'läuft',fertig:'fertig'})[g.status];
+  stBtn.addEventListener('click',()=>{ g.status=g.status==='offen'?'laeuft':(g.status==='laeuft'?'fertig':'offen'); speichern(); renderSpiele(); });
+  steuer.appendChild(stBtn);
+  body.appendChild(steuer);
+
+  // Ergebnis + automatische Platzpunkte
+  const pkt=document.createElement('div');
+  pkt.innerHTML=`<div class="feld-label">Ergebnis &amp; Platzpunkte je Spieler</div>`;
+  if(g.typ==='flaschen') pkt.innerHTML+=`<div class="hinweis" style="margin:4px 0">Flaschen zählen automatisch über 🎈/🍾-Marker. Rechts die Platzpunkte.</div>`;
+  pkt.appendChild(ergebnisBlock(g));
+  body.appendChild(pkt);
+
+  // Löschen (nur Zusatz-Spiele > Standard erlauben)
+  if(g.nr>11){ const del=document.createElement('button'); del.className='btn mini warn'; del.style.marginTop='8px'; del.textContent='Spiel löschen';
+    del.addEventListener('click',()=>{ if(confirm('Spiel löschen?')){ STATE.spiele=STATE.spiele.filter(x=>x!==g); speichern(); renderSpiele(); alleWertungen(); } }); body.appendChild(del); }
+
+  d.appendChild(body); return d;
+}
+
+/* ============================================================
+   Tagesablauf
+   ============================================================ */
+function renderAblauf(){
+  const ol=document.getElementById('ablaufListe'); ol.innerHTML='';
+  STATE.ablauf.forEach(s=>{ const li=document.createElement('li'); li.className=s.status==='laeuft'?'laeuft':(s.status==='fertig'?'fertig':'');
+    li.innerHTML=`<span class="schritt-emoji">${s.emoji}</span><div class="schritt-haupt"><div class="schritt-titel">${escHtml(s.titel)}</div><div class="schritt-info">${escHtml(s.info||'')}</div></div>`;
+    li.addEventListener('click',()=>{ s.status=s.status==='offen'?'laeuft':(s.status==='laeuft'?'fertig':'offen'); speichern(); renderAblauf(); }); ol.appendChild(li); });
+}
+
+/* ============================================================
+   Teilnehmer
+   ============================================================ */
+function renderTeilnehmer(){
+  const box=document.getElementById('tnListe'); box.innerHTML='';
+  STATE.teilnehmer.forEach(t=>{ const z=document.createElement('div'); z.className='tn-zeile';
+    z.innerHTML=`<input type="text" value="${escAttr(t.name)}"><label><input type="checkbox" ${t.ausrichter?'checked':''}> Ausrichter</label><button class="btn mini warn geist">✕</button>`;
+    z.querySelector('input[type=text]').addEventListener('input',e=>{ t.name=e.target.value; speichern(); });
+    z.querySelector('input[type=text]').addEventListener('blur',()=>renderAlleNamen());
+    z.querySelector('input[type=checkbox]').addEventListener('change',e=>{ t.ausrichter=e.target.checked; speichern(); renderAlleNamen(); });
+    z.querySelector('button').addEventListener('click',()=>{ if(confirm('Teilnehmer entfernen?')){ STATE.teilnehmer=STATE.teilnehmer.filter(x=>x!==t); speichern(); renderTeilnehmer(); renderAlleNamen(); } });
+    box.appendChild(z); });
+}
+function renderAlleNamen(){ renderSpiele(); alleWertungen(); markerNeuZeichnen(); }
+
+/* ============================================================
+   Leiste & Netz
+   ============================================================ */
+function renderLeiste(){
+  const w=gesamtProSpieler(); let f=null,max=-1;
+  aktiveSpieler().forEach(t=>{ if(w[t.id].gesamt>max){ max=w[t.id].gesamt; f=t; } });
+  document.getElementById('leisteFuehrender').textContent=(f&&max>0)?`🏆 ${f.name} (${max})`:'🏆 noch offen';
+  let offen=0; STATE.marker.forEach(m=>{ if(m.items) offen+=m.items.filter(i=>!i.spielerId).length; });
+  document.getElementById('leisteOffen').textContent=offen;
+}
+function netzStatus(){ const el=document.getElementById('netzStatus'); if(navigator.onLine){ el.textContent='● online'; el.className='online-an'; } else { el.textContent='● offline'; el.className='online-aus'; } }
+window.addEventListener('online',netzStatus); window.addEventListener('offline',netzStatus);
+
+/* ---------- Helfer ---------- */
+function escHtml(s){ return String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function escAttr(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ============================================================
+   Karten-Modi & Hinweis
+   ============================================================ */
+function aktualisiereKarteHinweis(){
+  const el=document.getElementById('karteHinweis');
+  if(routeModus) el.innerHTML='🛣️ <b>Route-Modus:</b> tippe nacheinander auf die Karte. Routenpunkt antippen löscht ihn.';
+  else if(bearbeiten) el.innerHTML='✏️ <b>Marker-Modus:</b> tippe auf die Karte für einen neuen Marker. Marker sind ziehbar.';
+  else el.innerHTML='Tippe Marker an, um Treffer/Funde &amp; Punkte zu erfassen.';
+}
+function setModus({m=false,r=false}){
+  bearbeiten=m; routeModus=r;
+  document.getElementById('btnBearbeiten').classList.toggle('aktiv',m);
+  document.getElementById('btnRoute').classList.toggle('aktiv',r);
+  aktualisiereKarteHinweis(); renderRoute(); markerNeuZeichnen();
+}
+
+/* ============================================================
+   Tabs & Events
+   ============================================================ */
+document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.classList.remove('aktiv'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('aktiv'));
+  b.classList.add('aktiv'); document.getElementById('panel-'+b.dataset.tab).classList.add('aktiv');
+  if(b.dataset.tab==='karte'&&map) setTimeout(()=>map.invalidateSize(),60);
+}));
+document.getElementById('btnBearbeiten').addEventListener('click',()=>setModus({m:!bearbeiten}));
+document.getElementById('btnRoute').addEventListener('click',()=>setModus({r:!routeModus}));
+document.getElementById('btnRouteUndo').addEventListener('click',()=>{ if(STATE.route.length){ STATE.route.pop(); speichern(); renderRoute(); } });
+document.getElementById('btnRouteClear').addEventListener('click',()=>{ if(STATE.route.length&&confirm('Ganze Route löschen?')){ STATE.route=[]; speichern(); renderRoute(); } });
+document.getElementById('btnZentrieren').addEventListener('click',()=>{
+  const pts=[...STATE.marker.map(m=>[m.lat,m.lng]), ...STATE.route];
+  if(pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.2)); else map.setView(ZENTRUM,START_ZOOM);
+});
+document.getElementById('btnSpielAdd').addEventListener('click',()=>{ const n=document.getElementById('neuesSpielName').value.trim(); if(!n) return;
+  const nr=Math.max(...STATE.spiele.map(s=>s.nr))+1; STATE.spiele.push({id:uid(),nr,name:n,regeln:'',modus:'',status:'offen',typ:'manuell',punkte:{}});
+  document.getElementById('neuesSpielName').value=''; speichern(); renderSpiele(); });
+document.getElementById('btnTnAdd').addEventListener('click',()=>{ STATE.teilnehmer.push({id:uid(),name:'Spieler '+(STATE.teilnehmer.length+1),ausrichter:false}); speichern(); renderTeilnehmer(); renderAlleNamen(); });
+document.getElementById('btnExport').addEventListener('click',()=>{ const blob=new Blob([JSON.stringify(STATE,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='trophy-sicherung-'+new Date().toISOString().slice(0,10)+'.json'; a.click(); toast('Sicherung heruntergeladen'); });
+document.getElementById('importDatei').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const fr=new FileReader();
+  fr.onload=()=>{ try{ const d=JSON.parse(fr.result); if(!d.teilnehmer) throw 0; STATE=migriere(d); speichern(); renderAlles(); toast('Sicherung geladen'); }catch(err){ alert('Datei konnte nicht gelesen werden.'); } }; fr.readAsText(f); });
+document.getElementById('btnReset').addEventListener('click',()=>{ if(confirm('Kompletten Spielstand löschen? (Offline-Kacheln bleiben)')){ STATE=standardDaten(); speichern(); renderAlles(); setModus({}); toast('Zurückgesetzt'); } });
+document.getElementById('btnKachelnLoeschen').addEventListener('click',async()=>{ if(confirm('Alle Offline-Kacheln löschen?')){ await tileClear(); toast('Offline-Kacheln gelöscht'); } });
+
+/* ---------- Start ---------- */
+function renderAlles(){ renderAblauf(); renderTeilnehmer(); renderSpiele(); alleWertungen(); renderRoute(); markerNeuZeichnen(); }
+initKarte(); renderAlles(); netzStatus();
+tileCount().then(n=>{ if(n>0) toast(n+' Kartenkacheln offline verfügbar'); });
+</script>
+<script>
+/* PWA: Service Worker registrieren (für Offline-Nutzung auf dem Handy) */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{ navigator.serviceWorker.register('service-worker.js').catch(()=>{}); });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "UrPils Trophy Leitstand",
+  "short_name": "Trophy",
+  "description": "Leitstand für die Karlsberg UrPils Trophy – Spiele, Route, Wertung.",
+  "lang": "de",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4ecd8",
+  "theme_color": "#1c4a2b",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
