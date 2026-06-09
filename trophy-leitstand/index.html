@@ -403,22 +403,25 @@ const LocalTiles = L.TileLayer.extend({
 // Alle gebündelten Kacheln einmal abrufen → Service-Worker cached sie (für echtes Offline)
 async function karteOfflineLaden(){
   const balken=document.getElementById('kachelBalken'), status=document.getElementById('kachelStatus');
+  balken.style.display='block'; status.style.display='block'; balken.scrollIntoView({block:'center',behavior:'smooth'});
+  const bar=balken.firstElementChild; bar.style.width='2%'; status.textContent='Karte wird geladen…'; toast('Karte wird geladen…');
   let liste;
   try{ liste=await (await fetch('assets/tiles/tiles-list.json',{cache:'reload'})).json(); }
-  catch(e){ toast('Kachel-Liste nicht gefunden – nur online verfügbar'); return; }
-  balken.style.display='block'; status.style.display='block'; const bar=balken.firstElementChild; let ok=0;
+  catch(e){ status.textContent='⚠️ Kachel-Liste nicht gefunden (nur online verfügbar).'; return; }
+  let ok=0;
   for(let i=0;i<liste.length;i++){
     try{ await fetch(liste[i],{cache:'reload'}); ok++; }catch(e){}
     bar.style.width=Math.round((i+1)/liste.length*100)+'%';
     status.textContent='Lade Karte… '+(i+1)+'/'+liste.length;
   }
-  status.textContent='✓ Karte offline gespeichert ('+ok+' Kacheln). Funktioniert jetzt ohne Netz.';
-  setTimeout(()=>balken.style.display='none',1800); toast('Karte ist offline verfügbar');
+  if(tileLayer) tileLayer.redraw();   // Karte mit frischen Kacheln neu zeichnen
+  status.textContent='✓ Karte offline gespeichert ('+ok+' Kacheln). Läuft jetzt ohne Netz.';
+  setTimeout(()=>balken.style.display='none',2200); toast('Karte ist offline verfügbar ✓');
 }
 /* ============================================================
    Karte
    ============================================================ */
-let map, routeLayer, markerLayer, bearbeiten=false, routeModus=false;
+let map, tileLayer, routeLayer, markerLayer, bearbeiten=false, routeModus=false;
 const MARKER_TYP = {
   ballon:{emoji:'🎈', label:'Ballons', items:true},
   flasche:{emoji:'🍾', label:'Flaschen', items:true},
@@ -429,7 +432,7 @@ const MARKER_TYP = {
 };
 function initKarte(){
   map=L.map('map',{tap:true}).setView(ZENTRUM,START_ZOOM);
-  new LocalTiles(TILE_LOKAL,{minZoom:12,maxZoom:19,minNativeZoom:13,maxNativeZoom:17,attribution:'© OpenStreetMap, © CARTO'}).addTo(map);
+  tileLayer=new LocalTiles(TILE_LOKAL,{minZoom:12,maxZoom:19,minNativeZoom:13,maxNativeZoom:17,attribution:'© OpenStreetMap, © CARTO'}).addTo(map);
   routeLayer=L.layerGroup().addTo(map);
   markerLayer=L.layerGroup().addTo(map);
   map.on('click', e=>{
