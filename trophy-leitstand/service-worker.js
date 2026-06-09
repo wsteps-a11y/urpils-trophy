@@ -1,6 +1,6 @@
 /* UrPils Trophy Leitstand — Service Worker (Offline-Cache der App)
    Hinweis: OSM-Kartenkacheln werden hier NICHT gecacht (separate Offline-Lösung). */
-const CACHE = 'trophy-leitstand-v4';
+const CACHE = 'trophy-leitstand-v5';
 const CORE = [
   './',
   './index.html',
@@ -34,8 +34,9 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.hostname.endsWith('basemaps.cartocdn.com')) return; // Online-Karten-Fallback nicht abfangen
+  const bypass = (req.cache === 'reload' || req.cache === 'no-store'); // erzwungenes Neuladen → frisch holen & Cache überschreiben
   e.respondWith((async () => {
-    const cached = await caches.match(req);
+    const cached = bypass ? null : await caches.match(req);
     if (cached) return cached;
     try {
       const resp = await fetch(req);
