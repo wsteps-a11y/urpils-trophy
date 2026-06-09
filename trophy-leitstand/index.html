@@ -392,7 +392,7 @@ const LocalTiles = L.TileLayer.extend({
       if(!online && navigator.onLine){
         online=true;
         const m=lokal.match(/tiles\/(\d+)\/(\d+)\/(\d+)\.png/);
-        if(m){ tile.src='https://'+['a','b','c'][(+m[2]+ +m[3])%3]+'.tile.openstreetmap.org/'+m[1]+'/'+m[2]+'/'+m[3]+'.png'; return; }
+        if(m){ tile.src='https://'+['a','b','c','d'][(+m[2]+ +m[3])%4]+'.basemaps.cartocdn.com/rastertiles/voyager/'+m[1]+'/'+m[2]+'/'+m[3]+'.png'; return; }
       }
       done(null,tile);
     };
@@ -429,7 +429,7 @@ const MARKER_TYP = {
 };
 function initKarte(){
   map=L.map('map',{tap:true}).setView(ZENTRUM,START_ZOOM);
-  new LocalTiles(TILE_LOKAL,{minZoom:12,maxZoom:19,minNativeZoom:13,maxNativeZoom:17,attribution:'© OpenStreetMap'}).addTo(map);
+  new LocalTiles(TILE_LOKAL,{minZoom:12,maxZoom:19,minNativeZoom:13,maxNativeZoom:17,attribution:'© OpenStreetMap, © CARTO'}).addTo(map);
   routeLayer=L.layerGroup().addTo(map);
   markerLayer=L.layerGroup().addTo(map);
   map.on('click', e=>{
