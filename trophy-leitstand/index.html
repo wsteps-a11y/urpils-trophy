@@ -588,7 +588,7 @@ function ergebnisBlock(g){
     const m=platzPunkte(g), roh=rohwerte(g);
     aktiveSpieler().forEach(t=>{
       if(ppEls[t.id]) ppEls[t.id].textContent=fmtPts(m[t.id]||0);
-      if(calcEls[t.id]) calcEls[t.id].textContent = roh[t.id]==null ? '–' : ('= '+fmtPts(roh[t.id])+(mode==='sup'?' eff.':''));
+      if(calcEls[t.id]) calcEls[t.id].textContent = roh[t.id]==null ? '–' : (mode==='sup' ? ('= '+fmtZeit(roh[t.id])+' eff.') : ('= '+fmtPts(roh[t.id])));
     });
   }
   const m0=platzPunkte(g);
@@ -602,10 +602,12 @@ function ergebnisBlock(g){
     }
     if(mode==='einzel'){
       g.ergebnis=g.ergebnis||{};
+      const istZeit=g.modus==='zeit';
       const z=document.createElement('div'); z.className='pkt-zeile';
       z.innerHTML=`<span class="sp-name">${escHtml(t.name)}</span>`;
-      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='decimal'; inp.placeholder=ph; inp.value=g.ergebnis[t.id]||'';
+      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode=istZeit?'text':'decimal'; inp.placeholder=istZeit?'mm:ss':ph; inp.value=g.ergebnis[t.id]||'';
       inp.addEventListener('input',()=>{ g.ergebnis[t.id]=inp.value; speichern(); refresh(); alleWertungen(); });
+      if(istZeit) inp.addEventListener('blur',()=>{ const s=parseZeit(inp.value); if(s!=null){ inp.value=fmtZeit(s); g.ergebnis[t.id]=inp.value; speichern(); } });
       z.appendChild(inp); z.appendChild(pp); wrap.appendChild(z); return;
     }
     if(mode==='sup'){
@@ -615,8 +617,9 @@ function ergebnisBlock(g){
       const sel=document.createElement('select'); sel.className='haltung';
       [['stehend','Stehend ×1'],['kniend','Kniend ×2'],['sitzend','Sitzend ×3']].forEach(([v,l])=>{ const o=document.createElement('option'); o.value=v; o.textContent=l; if((g.haltung[t.id]||'stehend')===v)o.selected=true; sel.appendChild(o); });
       sel.addEventListener('change',()=>{ g.haltung[t.id]=sel.value; speichern(); refresh(); alleWertungen(); });
-      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='decimal'; inp.placeholder='Zeit'; inp.value=g.ergebnis[t.id]||'';
+      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='text'; inp.placeholder='mm:ss'; inp.value=g.ergebnis[t.id]||'';
       inp.addEventListener('input',()=>{ g.ergebnis[t.id]=inp.value; speichern(); refresh(); alleWertungen(); });
+      inp.addEventListener('blur',()=>{ const s=parseZeit(inp.value); if(s!=null){ inp.value=fmtZeit(s); g.ergebnis[t.id]=inp.value; speichern(); } });
       const calc=document.createElement('span'); calc.className='calc'; calcEls[t.id]=calc;
       z.appendChild(sel); z.appendChild(inp); z.appendChild(calc); z.appendChild(pp); wrap.appendChild(z); return;
     }
@@ -663,6 +666,11 @@ function flaschenProSpieler(){ const r={}; aktiveSpieler().forEach(t=>r[t.id]=0)
 function spielRichtung(g){ if(g.eingabe==='sup') return 'tief'; return g.richtung || (g.modus==='zeit'?'tief':'hoch'); }
 function parseZahl(s){ if(s==null||s==='') return null; const n=parseFloat(String(s).replace(',','.').replace(/[^0-9.\-]/g,'')); return isNaN(n)?null:n; }
 function fmtPts(p){ p=Math.round(p*10)/10; return Number.isInteger(p)?String(p):String(p).replace('.',','); }
+// Zeit: Eingabe als mm:ss (oder reine Sekunden) → Sekunden; Anzeige als m:ss
+function parseZeit(s){ if(s==null) return null; s=String(s).trim(); if(s==='') return null;
+  if(s.indexOf(':')>=0){ const p=s.split(':'); const m=parseFloat((p[0]||'0').replace(',','.'))||0; const sec=parseFloat((p[1]||'0').replace(',','.'))||0; return m*60+sec; }
+  const n=parseFloat(s.replace(',','.')); return isNaN(n)?null:n; }
+function fmtZeit(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+':'+String(s).padStart(2,'0'); }
 
 // Rohwerte je Spieler für ein Spiel (je nach Eingabe-Modus)
 const HALTUNG_FAKTOR={stehend:1,kniend:2,sitzend:3};
@@ -677,11 +685,12 @@ function rohwerte(g){
   }
   if(mode==='sup'){
     g.ergebnis=g.ergebnis||{}; g.haltung=g.haltung||{};
-    aktive.forEach(t=>{ const z=parseZahl(g.ergebnis[t.id]); r[t.id]= z==null ? null : z*(HALTUNG_FAKTOR[g.haltung[t.id]||'stehend']||1); });
+    aktive.forEach(t=>{ const z=parseZeit(g.ergebnis[t.id]); r[t.id]= z==null ? null : z*(HALTUNG_FAKTOR[g.haltung[t.id]||'stehend']||1); });
     return r;
   }
   g.ergebnis=g.ergebnis||{};
-  aktive.forEach(t=>{ r[t.id]=parseZahl(g.ergebnis[t.id]); });
+  const istZeit=g.modus==='zeit';
+  aktive.forEach(t=>{ r[t.id]= istZeit ? parseZeit(g.ergebnis[t.id]) : parseZahl(g.ergebnis[t.id]); });
   return r;
 }
 // Lineare Platzpunkte je Spiel: bester = Anzahl Mitspieler, dann -1; Gleichstand = höherer Platz für alle, nächster übersprungen (Wettkampf-Wertung)
