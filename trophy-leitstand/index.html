@@ -146,6 +146,13 @@
   .pkt-zeile .roh{width:62px;text-align:center;font-size:13px;opacity:.85}
   .pkt-zeile b.pp{min-width:34px;text-align:center;font-family:'Oswald',sans-serif;color:var(--gruen);
      background:rgba(201,161,74,.22);border-radius:6px;padding:2px 0}
+  .pkt-zeile select.haltung{font-family:'Spectral',serif;font-size:12px;padding:4px;border:1px solid var(--papier-tief);border-radius:5px;background:#fff;color:var(--tinte)}
+  .pkt-zeile .calc{font-size:12px;opacity:.85;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pkt-zeile.sp-block{flex-direction:column;align-items:stretch;gap:5px;border-bottom:1px solid var(--papier-tief);padding-bottom:7px;margin-bottom:5px}
+  .sp-block .sp-top{display:flex;align-items:center;gap:8px}
+  .sp-block .sp-top .sp-name{flex:1}
+  .versuche-grid{display:flex;flex-wrap:wrap;gap:4px}
+  .versuche-grid input.vsuch{width:42px;text-align:center;padding:5px 2px}
   .feld-label{font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--gruen);margin-top:6px}
 </style>
 </head>
@@ -271,7 +278,7 @@
 const ZENTRUM = [49.5833, 6.8911];   // Wadrill
 const START_ZOOM = 15;
 const SPEICHER_KEY = 'trophyLeitstand_v1';
-const DATEN_VERSION = 4;
+const DATEN_VERSION = 5;
 const SCHEMA = 'linear';   // Platzpunkte: 1. = Anzahl Mitspieler, dann je -1
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -290,15 +297,26 @@ const SPIEL_NAMEN = [
   '6er Träger',             // 10
   'Flaschen finden & schießen' // 11 (Karte)
 ];
+// Eingabe-Modus je Spiel (nach Nummer): einzel | versuche (N Felder, Summe) | sup (Zeit × Haltungs-Faktor)
+const EINGABE_CFG = {
+  3: {eingabe:'sup'},
+  4: {eingabe:'versuche', versucheAnzahl:8},
+  6: {eingabe:'versuche', versucheAnzahl:5},
+  9: {eingabe:'versuche', versucheAnzahl:5, negativErlaubt:true}
+};
 function standardSpiele(){
   return SPIEL_NAMEN.map((name,i)=>{
-    const modus=(i+1===10)?'bastel':'';
+    const nr=i+1; const modus=(nr===10)?'bastel':'';
+    const cfg=EINGABE_CFG[nr]||{};
     return {
-      id:uid(), nr:i+1, name,
+      id:uid(), nr, name,
       regeln:'', modus, status:'offen',
-      typ: (i+1===11)?'flaschen':'manuell',
+      typ: (nr===11)?'flaschen':'manuell',
       richtung: (modus==='zeit')?'tief':'hoch',   // hoch = höher ist besser
-      ergebnis:{}, punkte:{}
+      eingabe: cfg.eingabe||'einzel',
+      versucheAnzahl: cfg.versucheAnzahl||0,
+      negativErlaubt: !!cfg.negativErlaubt,
+      ergebnis:{}, versuche:{}, haltung:{}, punkte:{}
     };
   });
 }
@@ -364,6 +382,18 @@ function migriere(s){
     });
     (s.teilnehmer||[]).forEach(t=>{ if(!t.streich) t.streich='auto'; });
     s.v=4;
+  }
+  // v4 → v5: Eingabe-Modi (Versuche-Felder, SUP-Haltung) je Spiel
+  if(s.v<5){
+    (s.spiele||[]).forEach(g=>{
+      const cfg=EINGABE_CFG[g.nr];
+      if(cfg){ g.eingabe=cfg.eingabe; g.versucheAnzahl=cfg.versucheAnzahl||0; g.negativErlaubt=!!cfg.negativErlaubt; }
+      else if(!g.eingabe) g.eingabe='einzel';
+      if(!g.versuche) g.versuche={};
+      if(!g.haltung) g.haltung={};
+      if(g.nr===4 && g.regeln) g.regeln=g.regeln.replace('10 Versuche','8 Versuche');
+    });
+    s.v=5;
   }
   return s;
 }
@@ -536,25 +566,64 @@ function popupInhalt(m){
 }
 // Block aus Ergebnis-Eingabe + automatischen Platzpunkten (geteilt: Spiele-Tab & Karten-Popup)
 function ergebnisBlock(g){
-  const wrap=document.createElement('div'); g.ergebnis=g.ergebnis||{};
-  const ppEls={};
+  const wrap=document.createElement('div');
+  const mode = g.typ==='flaschen' ? 'flaschen' : (g.eingabe||'einzel');
+  const ppEls={}, calcEls={};
   const ph = g.modus==='zeit'?'Zeit':(g.modus==='versuche'?'Treffer':(g.modus==='bastel'?'Wertung':'Punkte'));
-  function refresh(){ const m=platzPunkte(g); aktiveSpieler().forEach(t=>{ if(ppEls[t.id]) ppEls[t.id].textContent=fmtPts(m[t.id]||0); }); }
+  function refresh(){
+    const m=platzPunkte(g), roh=rohwerte(g);
+    aktiveSpieler().forEach(t=>{
+      if(ppEls[t.id]) ppEls[t.id].textContent=fmtPts(m[t.id]||0);
+      if(calcEls[t.id]) calcEls[t.id].textContent = roh[t.id]==null ? '–' : ('= '+fmtPts(roh[t.id])+(mode==='sup'?' eff.':''));
+    });
+  }
   const m0=platzPunkte(g);
   aktiveSpieler().forEach(t=>{
-    const z=document.createElement('div'); z.className='pkt-zeile';
-    const name=document.createElement('span'); name.className='sp-name'; name.textContent=t.name; z.appendChild(name);
-    if(g.typ==='flaschen'){
-      const roh=document.createElement('span'); roh.className='roh'; roh.textContent=(flaschenProSpieler()[t.id]||0)+' 🍾'; z.appendChild(roh);
-    } else {
-      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='decimal';
-      inp.placeholder=ph; inp.value=g.ergebnis[t.id]||'';
-      inp.addEventListener('input',()=>{ g.ergebnis[t.id]=inp.value; speichern(); refresh(); alleWertungen(); });
-      z.appendChild(inp);
+    const pp=document.createElement('b'); pp.className='pp'; pp.title='Platzpunkte'; pp.textContent=fmtPts(m0[t.id]||0); ppEls[t.id]=pp;
+
+    if(mode==='flaschen'){
+      const z=document.createElement('div'); z.className='pkt-zeile';
+      z.innerHTML=`<span class="sp-name">${escHtml(t.name)}</span><span class="roh">${flaschenProSpieler()[t.id]||0} 🍾</span>`;
+      z.appendChild(pp); wrap.appendChild(z); return;
     }
-    const pp=document.createElement('b'); pp.className='pp'; pp.textContent=fmtPts(m0[t.id]||0); pp.title='Platzpunkte'; ppEls[t.id]=pp;
-    z.appendChild(pp); wrap.appendChild(z);
+    if(mode==='einzel'){
+      g.ergebnis=g.ergebnis||{};
+      const z=document.createElement('div'); z.className='pkt-zeile';
+      z.innerHTML=`<span class="sp-name">${escHtml(t.name)}</span>`;
+      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='decimal'; inp.placeholder=ph; inp.value=g.ergebnis[t.id]||'';
+      inp.addEventListener('input',()=>{ g.ergebnis[t.id]=inp.value; speichern(); refresh(); alleWertungen(); });
+      z.appendChild(inp); z.appendChild(pp); wrap.appendChild(z); return;
+    }
+    if(mode==='sup'){
+      g.ergebnis=g.ergebnis||{}; g.haltung=g.haltung||{};
+      const z=document.createElement('div'); z.className='pkt-zeile';
+      z.innerHTML=`<span class="sp-name">${escHtml(t.name)}</span>`;
+      const sel=document.createElement('select'); sel.className='haltung';
+      [['stehend','Stehend ×1'],['kniend','Kniend ×2'],['sitzend','Sitzend ×3']].forEach(([v,l])=>{ const o=document.createElement('option'); o.value=v; o.textContent=l; if((g.haltung[t.id]||'stehend')===v)o.selected=true; sel.appendChild(o); });
+      sel.addEventListener('change',()=>{ g.haltung[t.id]=sel.value; speichern(); refresh(); alleWertungen(); });
+      const inp=document.createElement('input'); inp.className='erg'; inp.type='text'; inp.inputMode='decimal'; inp.placeholder='Zeit'; inp.value=g.ergebnis[t.id]||'';
+      inp.addEventListener('input',()=>{ g.ergebnis[t.id]=inp.value; speichern(); refresh(); alleWertungen(); });
+      const calc=document.createElement('span'); calc.className='calc'; calcEls[t.id]=calc;
+      z.appendChild(sel); z.appendChild(inp); z.appendChild(calc); z.appendChild(pp); wrap.appendChild(z); return;
+    }
+    if(mode==='versuche'){
+      const n=g.versucheAnzahl||5; g.versuche=g.versuche||{}; g.versuche[t.id]=g.versuche[t.id]||[];
+      const arr=g.versuche[t.id]; while(arr.length<n) arr.push('');
+      const z=document.createElement('div'); z.className='pkt-zeile sp-block';
+      const top=document.createElement('div'); top.className='sp-top';
+      const name=document.createElement('span'); name.className='sp-name'; name.textContent=t.name;
+      const calc=document.createElement('span'); calc.className='calc'; calcEls[t.id]=calc;
+      top.appendChild(name); top.appendChild(calc); top.appendChild(pp); z.appendChild(top);
+      const grid=document.createElement('div'); grid.className='versuche-grid';
+      for(let k=0;k<n;k++){
+        const inp=document.createElement('input'); inp.className='erg vsuch'; inp.type='text'; inp.inputMode=g.negativErlaubt?'text':'decimal'; inp.placeholder=(k+1)+'.'; inp.value=arr[k]||'';
+        inp.addEventListener('input',()=>{ arr[k]=inp.value; speichern(); refresh(); alleWertungen(); });
+        grid.appendChild(inp);
+      }
+      z.appendChild(grid); wrap.appendChild(z); return;
+    }
   });
+  refresh();
   return wrap;
 }
 function markerHinzufuegenDialog(latlng){
@@ -577,16 +646,28 @@ function markerErstellen(typ,latlng){
 function flaschenProSpieler(){ const r={}; aktiveSpieler().forEach(t=>r[t.id]=0);
   STATE.marker.forEach(m=>{ if((m.typ==='ballon'||m.typ==='flasche')&&m.items) m.items.forEach(it=>{ if(it.spielerId&&r[it.spielerId]!=null) r[it.spielerId]++; }); }); return r; }
 
-function spielRichtung(g){ return g.richtung || (g.modus==='zeit'?'tief':'hoch'); }
+function spielRichtung(g){ if(g.eingabe==='sup') return 'tief'; return g.richtung || (g.modus==='zeit'?'tief':'hoch'); }
 function parseZahl(s){ if(s==null||s==='') return null; const n=parseFloat(String(s).replace(',','.').replace(/[^0-9.\-]/g,'')); return isNaN(n)?null:n; }
 function fmtPts(p){ p=Math.round(p*10)/10; return Number.isInteger(p)?String(p):String(p).replace('.',','); }
 
-// Rohwerte je Spieler für ein Spiel (Ergebnis-Eingabe bzw. Flaschenzahl)
+// Rohwerte je Spieler für ein Spiel (je nach Eingabe-Modus)
+const HALTUNG_FAKTOR={stehend:1,kniend:2,sitzend:3};
 function rohwerte(g){
-  const r={};
-  if(g.typ==='flaschen'){ const fl=flaschenProSpieler(); aktiveSpieler().forEach(t=>r[t.id]=fl[t.id]||0); return r; }
+  const r={}; const aktive=aktiveSpieler();
+  if(g.typ==='flaschen'){ const fl=flaschenProSpieler(); aktive.forEach(t=>r[t.id]=fl[t.id]||0); return r; }
+  const mode=g.eingabe||'einzel';
+  if(mode==='versuche'){
+    g.versuche=g.versuche||{};
+    aktive.forEach(t=>{ const arr=g.versuche[t.id]||[]; const hat=arr.some(v=>v!==''&&v!=null); r[t.id]= hat ? arr.reduce((s,v)=>s+(parseZahl(v)||0),0) : null; });
+    return r;
+  }
+  if(mode==='sup'){
+    g.ergebnis=g.ergebnis||{}; g.haltung=g.haltung||{};
+    aktive.forEach(t=>{ const z=parseZahl(g.ergebnis[t.id]); r[t.id]= z==null ? null : z*(HALTUNG_FAKTOR[g.haltung[t.id]||'stehend']||1); });
+    return r;
+  }
   g.ergebnis=g.ergebnis||{};
-  aktiveSpieler().forEach(t=>{ r[t.id]=parseZahl(g.ergebnis[t.id]); });
+  aktive.forEach(t=>{ r[t.id]=parseZahl(g.ergebnis[t.id]); });
   return r;
 }
 // Lineare Platzpunkte je Spiel: bester = Anzahl Mitspieler, dann -1; Gleichstand teilt sich die Punkte
