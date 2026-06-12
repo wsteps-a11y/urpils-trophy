@@ -153,6 +153,8 @@
   .sp-block .sp-top .sp-name{flex:1}
   .versuche-grid{display:flex;flex-wrap:wrap;gap:4px}
   .versuche-grid input.vsuch{width:42px;text-align:center;padding:5px 2px}
+  .beginnt{font-size:13px;background:rgba(28,74,43,.10);border-left:3px solid var(--gruen);
+     padding:5px 8px;border-radius:5px;margin:4px 0 8px;color:var(--gruen-tief)}
   .feld-label{font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--gruen);margin-top:6px}
 </style>
 </head>
@@ -578,7 +580,7 @@ function ergebnisBlock(g){
     });
   }
   const m0=platzPunkte(g);
-  aktiveSpieler().forEach(t=>{
+  startReihenfolge(g).forEach(t=>{
     const pp=document.createElement('b'); pp.className='pp'; pp.title='Platzpunkte'; pp.textContent=fmtPts(m0[t.id]||0); ppEls[t.id]=pp;
 
     if(mode==='flaschen'){
@@ -692,6 +694,16 @@ function platzPunkte(g){
 }
 // Streichbare Spiele: alle Mess-Spiele außer Quiz(1), 6er Träger(10) und Flaschen(11)
 function streichbareSpiele(){ return STATE.spiele.filter(g=> g.typ==='manuell' && g.nr!==1 && g.nr!==10); }
+// Rotierende Startreihenfolge für Spiele 2–9: jedes Spiel beginnt ein anderer, Flo beginnt Spiel 9
+function startReihenfolge(g){
+  const akt=aktiveSpieler(); const P=akt.length;
+  if(!g || g.nr<2 || g.nr>9 || P===0) return akt;
+  let flo=akt.findIndex(t=>/flo/i.test(t.name||''));
+  const anker = flo>=0 ? flo : (9-2);          // ohne Flo: Spiel 2 beginnt mit dem ersten Spieler
+  const offset = (((anker-(9-2)) % P)+P)%P;     // so dass Spiel 9 beim Anker startet
+  const idx = (offset + (g.nr-2)) % P;
+  return akt.slice(idx).concat(akt.slice(0,idx));
+}
 
 function gesamtProSpieler(){
   const fl=flaschenProSpieler();
@@ -796,6 +808,7 @@ function spielKarte(g){
   const pkt=document.createElement('div');
   pkt.innerHTML=`<div class="feld-label">Ergebnis &amp; Platzpunkte je Spieler</div>`;
   if(g.typ==='flaschen') pkt.innerHTML+=`<div class="hinweis" style="margin:4px 0">Flaschen zählen automatisch über 🎈/🍾-Marker. Rechts die Platzpunkte.</div>`;
+  if(g.nr>=2 && g.nr<=9){ const erste=startReihenfolge(g)[0]; if(erste) pkt.innerHTML+=`<div class="beginnt">▶ Beginnt: <b>${escHtml(erste.name)}</b> &middot; dann der Reihe nach</div>`; }
   pkt.appendChild(ergebnisBlock(g));
   body.appendChild(pkt);
 
