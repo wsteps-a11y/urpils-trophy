@@ -154,7 +154,8 @@
   .versuche-grid{display:flex;flex-wrap:wrap;gap:4px}
   .versuche-grid input.vsuch{width:42px;text-align:center;padding:5px 2px}
   .beginnt{font-size:13px;background:rgba(28,74,43,.10);border-left:3px solid var(--gruen);
-     padding:5px 8px;border-radius:5px;margin:4px 0 8px;color:var(--gruen-tief)}
+     padding:6px 8px;border-radius:5px;margin:4px 0 8px;color:var(--gruen-tief);display:flex;align-items:center;flex-wrap:wrap;gap:2px}
+  select.beginner-sel{font-family:'Spectral',serif;font-size:13px;padding:3px 5px;border:1px solid var(--papier-tief);border-radius:5px;background:#fff;color:var(--tinte)}
   .feld-label{font-size:12px;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.5px;color:var(--gruen);margin-top:6px}
 </style>
 </head>
@@ -280,7 +281,7 @@
 const ZENTRUM = [49.5833, 6.8911];   // Wadrill
 const START_ZOOM = 15;
 const SPEICHER_KEY = 'trophyLeitstand_v1';
-const DATEN_VERSION = 5;
+const DATEN_VERSION = 6;
 const SCHEMA = 'linear';   // Platzpunkte: 1. = Anzahl Mitspieler, dann je -1
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
@@ -318,6 +319,7 @@ function standardSpiele(){
       eingabe: cfg.eingabe||'einzel',
       versucheAnzahl: cfg.versucheAnzahl||0,
       negativErlaubt: !!cfg.negativErlaubt,
+      beginner:'',
       ergebnis:{}, versuche:{}, haltung:{}, punkte:{}
     };
   });
@@ -396,6 +398,16 @@ function migriere(s){
       if(g.nr===4 && g.regeln) g.regeln=g.regeln.replace('10 Versuche','8 Versuche');
     });
     s.v=5;
+  }
+  // v5 → v6: Start-Beginner je Spiel; feste Vorgaben Dennis@3, Flo@9
+  if(s.v<6){
+    const akt=(s.teilnehmer||[]).filter(t=>!t.ausrichter);
+    const findId=re=>{ const t=akt.find(x=>re.test(x.name||'')); return t?t.id:null; };
+    (s.spiele||[]).forEach(g=>{ if(g.beginner===undefined) g.beginner=''; });
+    const setB=(nr,id)=>{ const g=(s.spiele||[]).find(x=>x.nr===nr); if(g && !g.beginner && id) g.beginner=id; };
+    setB(3, findId(/dennis/i));
+    setB(9, findId(/flo/i));
+    s.v=6;
   }
   return s;
 }
@@ -694,14 +706,32 @@ function platzPunkte(g){
 }
 // Streichbare Spiele: alle Mess-Spiele außer Quiz(1), 6er Träger(10) und Flaschen(11)
 function streichbareSpiele(){ return STATE.spiele.filter(g=> g.typ==='manuell' && g.nr!==1 && g.nr!==10); }
-// Rotierende Startreihenfolge für Spiele 2–9: jedes Spiel beginnt ein anderer, Flo beginnt Spiel 9
-function startReihenfolge(g){
-  const akt=aktiveSpieler(); const P=akt.length;
-  if(!g || g.nr<2 || g.nr>9 || P===0) return akt;
+// Startreihenfolge Spiele 2–9: feste Vorgaben (g.beginner) + automatische Rotation für den Rest,
+// so dass jeder Spieler genau einmal beginnt. Reine Rotation ist an Flo@Spiel9 verankert.
+function rotationsBeginnerId(nr, akt){
+  const P=akt.length; if(!P) return null;
   let flo=akt.findIndex(t=>/flo/i.test(t.name||''));
-  const anker = flo>=0 ? flo : (9-2);          // ohne Flo: Spiel 2 beginnt mit dem ersten Spieler
-  const offset = (((anker-(9-2)) % P)+P)%P;     // so dass Spiel 9 beim Anker startet
-  const idx = (offset + (g.nr-2)) % P;
+  const anker = flo>=0 ? flo : (9-2);
+  const offset = (((anker-(9-2)) % P)+P)%P;
+  return akt[(offset + (nr-2)) % P].id;
+}
+function startZuordnung(){
+  const akt=aktiveSpieler(); const map={}; if(!akt.length) return map;
+  const games=[2,3,4,5,6,7,8,9];
+  const byNr={}; STATE.spiele.forEach(g=>{ if(g.nr>=2&&g.nr<=9) byNr[g.nr]=g; });
+  const used=new Set();
+  games.forEach(nr=>{ const pid=byNr[nr]&&byNr[nr].beginner; if(pid && akt.some(t=>t.id===pid)){ map[nr]=pid; used.add(pid); } });
+  const rest=[];
+  games.forEach(nr=>{ const pid=rotationsBeginnerId(nr,akt); if(pid && !used.has(pid) && rest.indexOf(pid)<0) rest.push(pid); });
+  akt.forEach(t=>{ if(!used.has(t.id) && rest.indexOf(t.id)<0) rest.push(t.id); });
+  let ri=0; games.forEach(nr=>{ if(!map[nr]) map[nr]=rest[ri++]||null; });
+  return map;
+}
+function startReihenfolge(g){
+  const akt=aktiveSpieler();
+  if(!g || g.nr<2 || g.nr>9 || !akt.length) return akt;
+  const bid=startZuordnung()[g.nr];
+  let idx=akt.findIndex(t=>t.id===bid); if(idx<0) idx=0;
   return akt.slice(idx).concat(akt.slice(0,idx));
 }
 
@@ -808,7 +838,19 @@ function spielKarte(g){
   const pkt=document.createElement('div');
   pkt.innerHTML=`<div class="feld-label">Ergebnis &amp; Platzpunkte je Spieler</div>`;
   if(g.typ==='flaschen') pkt.innerHTML+=`<div class="hinweis" style="margin:4px 0">Flaschen zählen automatisch über 🎈/🍾-Marker. Rechts die Platzpunkte.</div>`;
-  if(g.nr>=2 && g.nr<=9){ const erste=startReihenfolge(g)[0]; if(erste) pkt.innerHTML+=`<div class="beginnt">▶ Beginnt: <b>${escHtml(erste.name)}</b> &middot; dann der Reihe nach</div>`; }
+  if(g.nr>=2 && g.nr<=9){
+    const bz=document.createElement('div'); bz.className='beginnt';
+    bz.appendChild(document.createTextNode('▶ Beginnt: '));
+    const bsel=document.createElement('select'); bsel.className='beginner-sel';
+    bsel.innerHTML='<option value="">Automatisch</option>'+aktiveSpieler().map(t=>`<option value="${t.id}" ${g.beginner===t.id?'selected':''}>${escAttr(t.name)}</option>`).join('');
+    bsel.addEventListener('change',()=>{ g.beginner=bsel.value; speichern(); renderSpiele(); });
+    bz.appendChild(bsel);
+    const erste=startReihenfolge(g)[0];
+    const info=document.createElement('span'); info.style.cssText='margin-left:8px;font-size:12px;opacity:.85';
+    info.textContent = erste ? ('→ '+erste.name+(g.beginner?'':' (autom.)')+', dann der Reihe nach') : '';
+    bz.appendChild(info);
+    pkt.appendChild(bz);
+  }
   pkt.appendChild(ergebnisBlock(g));
   body.appendChild(pkt);
 
