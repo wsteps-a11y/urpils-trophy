@@ -216,7 +216,7 @@
   <!-- WERTUNG -->
   <section class="panel" id="panel-wertung">
     <h2>Tageswertung</h2>
-    <div class="hinweis">Platzpunkte pro Spiel: <b>1. Platz = Anzahl Mitspieler</b>, dann je −1 (Gleichstand teilt sich die Punkte). Summe aller 11 Spiele <b>minus dem Streichresultat</b>. 🍾 = gesammelte Flaschen. Sieger 🏆 oben, Rote Laterne 🔴 unten.</div>
+    <div class="hinweis">Platzpunkte pro Spiel: <b>1. Platz = Anzahl Mitspieler</b>, dann je −1. Bei Gleichstand zählt der <b>höhere Platz</b> für alle, der nächste wird übersprungen. Summe aller 11 Spiele <b>minus dem Streichresultat</b>. 🍾 = gesammelte Flaschen. Sieger 🏆 oben, Rote Laterne 🔴 unten.</div>
     <table id="wertungTabelle"></table>
     <h2 style="margin-top:22px">✂️ Streichresultat</h2>
     <div class="hinweis">Jeder streicht <b>genau ein</b> Spiel (Pflicht). Nicht streichbar: Quiz, 6er Träger, Flaschen. Standard ist automatisch das schlechteste Spiel – pro Spieler änderbar.</div>
@@ -684,7 +684,7 @@ function rohwerte(g){
   aktive.forEach(t=>{ r[t.id]=parseZahl(g.ergebnis[t.id]); });
   return r;
 }
-// Lineare Platzpunkte je Spiel: bester = Anzahl Mitspieler, dann -1; Gleichstand teilt sich die Punkte
+// Lineare Platzpunkte je Spiel: bester = Anzahl Mitspieler, dann -1; Gleichstand = höherer Platz für alle, nächster übersprungen (Wettkampf-Wertung)
 function platzPunkte(g){
   const aktive=aktiveSpieler(); const N=aktive.length;
   const roh=rohwerte(g); const richtung=spielRichtung(g);
@@ -697,9 +697,10 @@ function platzPunkte(g){
   let i=0;
   while(i<sortiert.length){
     let j=i; while(j+1<sortiert.length && roh[sortiert[j+1].id]===roh[sortiert[i].id]) j++;
-    let summe=0; for(let k=i;k<=j;k++) summe += (N-k);   // Punkte für Rang k+1 = N-k
-    const avg=summe/(j-i+1);
-    for(let k=i;k<=j;k++) pts[sortiert[k].id]=avg;
+    // Wettkampf-Wertung: bei Gleichstand bekommen alle den höheren Platz (N-i),
+    // die folgenden Plätze werden übersprungen.
+    const gruppenPunkte = N - i;
+    for(let k=i;k<=j;k++) pts[sortiert[k].id]=gruppenPunkte;
     i=j+1;
   }
   return pts;
