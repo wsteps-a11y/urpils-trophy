@@ -96,6 +96,8 @@
   .pop h4{font-family:'Oswald',sans-serif;color:var(--gruen);text-transform:uppercase;font-size:14px;margin-bottom:6px}
   .pop .item-zeile{display:flex;align-items:center;gap:6px;margin:4px 0}
   .pop select,.pop input{font-family:'Spectral',serif;font-size:13px;padding:4px;border:1px solid #bbb;border-radius:5px}
+  .pop textarea{width:100%;min-height:44px;font-family:'Spectral',serif;font-size:13px;padding:5px;border:1px solid #bbb;border-radius:5px;resize:vertical;margin-bottom:7px;color:var(--tinte)}
+  .pin .notiz{position:absolute;bottom:-3px;left:-11px;font-size:12px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.5))}
   .pop .pkt-zeile{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:3px 0}
   .pop .regel{font-size:12px;font-style:italic;background:rgba(201,161,74,.16);padding:6px 8px;border-radius:6px;margin:4px 0;white-space:pre-wrap}
 
@@ -523,7 +525,7 @@ function renderRoute(){
 }
 function iconFor(m){
   const typ=MARKER_TYP[m.typ]; let badge='';
-  if(typ.items){ const offen=(m.items||[]).filter(i=>!i.spielerId).length; badge=`<span class="badge ${offen===0?'leer':''}">${offen}</span>`; }
+  if(typ.items){ const offen=(m.items||[]).filter(i=>!i.spielerId).length; badge=`<span class="badge ${offen===0?'leer':''}">${offen}</span>`; if((m.kommentar||'').trim()) badge+=`<span class="notiz">📝</span>`; }
   else if(m.typ==='station' && m.spielId){ const g=spielById(m.spielId); if(g) badge=`<span class="badge spielnr">${g.nr}</span>`; }
   return L.divIcon({className:'', iconSize:[34,40], iconAnchor:[17,38], html:`<div class="pin pin-${m.typ}">${typ.emoji}${badge}</div>`});
 }
@@ -544,6 +546,11 @@ function popupInhalt(m){
   if(typ.items){
     const offen=m.items.filter(i=>!i.spielerId).length;
     div.innerHTML=`<h4>${typ.emoji} ${escHtml(titel)}</h4><div style="font-size:12px;margin-bottom:6px">${m.items.length} Stück · offen: <b>${offen}</b></div>`;
+    const kl=document.createElement('div'); kl.style.cssText='font-size:11px;color:var(--gruen);margin-bottom:2px';
+    kl.textContent='📝 Versteck-Hinweis:';
+    const kta=document.createElement('textarea'); kta.placeholder='z. B. dritter Baum links, unter dem Stein neben der Bank …'; kta.value=m.kommentar||'';
+    kta.addEventListener('input',()=>{ m.kommentar=kta.value; speichern(); markerNeuZeichnen(); });
+    div.appendChild(kl); div.appendChild(kta);
     m.items.forEach((it,idx)=>{
       const z=document.createElement('div'); z.className='item-zeile';
       z.innerHTML=`<span style="width:20px">${idx+1}.</span><select style="flex:1">${spielerOptions(it.spielerId)}</select>`;
