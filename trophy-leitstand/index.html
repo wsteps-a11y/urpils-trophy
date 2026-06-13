@@ -88,7 +88,7 @@
   .schritt-info{font-size:13px;font-style:italic;opacity:.8}
 
   .tn-zeile{display:flex;align-items:center;gap:8px;padding:8px;background:rgba(255,255,255,.4);
-     border-radius:8px;margin-bottom:6px}
+     border-radius:8px;margin-bottom:6px;flex-wrap:wrap}
   .tn-zeile input[type=text]{flex:1;font-family:'Spectral',serif;font-size:15px;padding:7px 9px;
      border:1px solid var(--papier-tief);border-radius:6px;background:#fff;color:var(--tinte)}
   .tn-zeile label{font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap}
@@ -733,7 +733,7 @@ function rotationsBeginnerId(nr, akt){
   return akt[(offset + (nr-2)) % P].id;
 }
 function startZuordnung(){
-  const akt=aktiveSpieler(); const map={}; if(!akt.length) return map;
+  const akt=aktiveSpieler().filter(t=>!t.keinStart); const map={}; if(!akt.length) return map;
   const games=[2,3,4,5,6,7,8,9];
   const byNr={}; STATE.spiele.forEach(g=>{ if(g.nr>=2&&g.nr<=9) byNr[g.nr]=g; });
   const used=new Set();
@@ -894,10 +894,14 @@ function renderAblauf(){
 function renderTeilnehmer(){
   const box=document.getElementById('tnListe'); box.innerHTML='';
   STATE.teilnehmer.forEach(t=>{ const z=document.createElement('div'); z.className='tn-zeile';
-    z.innerHTML=`<input type="text" value="${escAttr(t.name)}"><label><input type="checkbox" ${t.ausrichter?'checked':''}> Ausrichter</label><button class="btn mini warn geist">✕</button>`;
-    z.querySelector('input[type=text]').addEventListener('input',e=>{ t.name=e.target.value; speichern(); });
-    z.querySelector('input[type=text]').addEventListener('blur',()=>renderAlleNamen());
-    z.querySelector('input[type=checkbox]').addEventListener('change',e=>{ t.ausrichter=e.target.checked; speichern(); renderAlleNamen(); });
+    z.innerHTML=`<input type="text" class="tn-name" value="${escAttr(t.name)}">`
+      +`<label><input type="checkbox" class="tn-ausr" ${t.ausrichter?'checked':''}> Ausrichter</label>`
+      +`<label title="Spielt mit, beginnt aber kein Spiel"><input type="checkbox" class="tn-kein" ${t.keinStart?'checked':''}> beginnt nicht</label>`
+      +`<button class="btn mini warn geist">✕</button>`;
+    z.querySelector('.tn-name').addEventListener('input',e=>{ t.name=e.target.value; speichern(); });
+    z.querySelector('.tn-name').addEventListener('blur',()=>renderAlleNamen());
+    z.querySelector('.tn-ausr').addEventListener('change',e=>{ t.ausrichter=e.target.checked; speichern(); renderAlleNamen(); });
+    z.querySelector('.tn-kein').addEventListener('change',e=>{ t.keinStart=e.target.checked; speichern(); renderAlleNamen(); });
     z.querySelector('button').addEventListener('click',()=>{ if(confirm('Teilnehmer entfernen?')){ STATE.teilnehmer=STATE.teilnehmer.filter(x=>x!==t); speichern(); renderTeilnehmer(); renderAlleNamen(); } });
     box.appendChild(z); });
 }
